@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Background circle -->
+  <circle cx="256" cy="256" r="256" fill="#FF6B6B"/>
+
+  <!-- Toothbrush handle -->
+  <rect x="140" y="320" width="232" height="48" rx="24" fill="#4ECDC4"/>
+
+  <!-- Toothbrush head -->
+  <rect x="100" y="280" width="80" height="130" rx="20" fill="#FFFFFF"/>
+
+  <!-- Bristles -->
+  <rect x="115" y="295" width="12" height="35" rx="4" fill="#E8E8E8"/>
+  <rect x="135" y="295" width="12" height="35" rx="4" fill="#E8E8E8"/>
+  <rect x="155" y="295" width="12" height="35" rx="4" fill="#E8E8E8"/>
+
+  <!-- Sparkles -->
+  <circle cx="200" cy="180" r="20" fill="#FFE66D"/>
+  <circle cx="320" cy="150" r="15" fill="#FFE66D"/>
+  <circle cx="380" cy="220" r="12" fill="#FFE66D"/>
+
+  <!-- Small sparkle stars -->
+  <path d="M200 160 L205 175 L220 180 L205 185 L200 200 L195 185 L180 180 L195 175 Z" fill="white"/>
+  <path d="M320 130 L323 140 L333 143 L323 146 L320 156 L317 146 L307 143 L317 140 Z" fill="white"/>
+
+  <!-- Tooth character - body -->
+  <ellipse cx="300" cy="200" rx="70" ry="80" fill="white"/>
+
+  <!-- Tooth roots -->
+  <ellipse cx="270" cy="270" rx="20" ry="35" fill="white"/>
+  <ellipse cx="330" cy="270" rx="20" ry="35" fill="white"/>
+
+  <!-- Tooth face - eyes -->
+  <ellipse cx="280" cy="185" rx="12" ry="15" fill="#333"/>
+  <ellipse cx="320" cy="185" rx="12" ry="15" fill="#333"/>
+
+  <!-- Eye shine -->
+  <circle cx="284" cy="180" r="5" fill="white"/>
+  <circle cx="324" cy="180" r="5" fill="white"/>
+
+  <!-- Happy smile -->
+  <path d="M270 210 Q300 245 330 210" stroke="#FF6B6B" stroke-width="6" fill="none" stroke-linecap="round"/>
+
+  <!-- Rosy cheeks -->
+  <ellipse cx="255" cy="205" rx="12" ry="8" fill="#FFB5B5" opacity="0.7"/>
+  <ellipse cx="345" cy="205" rx="12" ry="8" fill="#FFB5B5" opacity="0.7"/>
+</svg>
