@@ -1,12 +1,15 @@
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { generateClient } from 'aws-amplify/data'
+import type { Schema } from '../../amplify/data/resource'
 import BrushTimer from '../components/timer/BrushTimer'
 import StoryPlayer from '../components/story/StoryPlayer'
 import PlaybackControls from '../components/story/PlaybackControls'
 import type { Story } from '../hooks/useStoryGeneration'
-import { useBrowserTTS } from '../hooks/useTextToSpeech'
 import { useAppStore } from '../store/useAppStore'
 import styles from './StoryPage.module.css'
+
+const client = generateClient<Schema>()
 
 // Fallback story if none provided
 const createFallbackStory = (): Story => ({
@@ -53,8 +56,92 @@ export default function StoryPage() {
   const [spokenSegments, setSpokenSegments] = useState<Set<number>>(new Set())
   const hasSpokenIntro = useRef(false)
 
-  // Browser TTS (free, works offline)
-  const { speak, stop, pause, resume, isSpeaking } = useBrowserTTS()
+  // Polly TTS state
+  const [isSpeaking, setIsSpeaking] = useState(false)
+  const [isSynthesizing, setIsSynthesizing] = useState(false)
+  const audioRef = useRef<HTMLAudioElement | null>(null)
+  const audioQueueRef = useRef<string[]>([])
+  const isPlayingQueueRef = useRef(false)
+
+  // Polly TTS functions
+  const synthesizeAndPlay = useCallback(async (text: string, voiceIdToUse: string) => {
+    setIsSynthesizing(true)
+    try {
+      const result = await client.queries.synthesizeSpeech({
+        text,
+        voiceId: voiceIdToUse,
+      })
+
+      if (result.errors || !result.data) {
+        console.error('TTS error:', result.errors)
+        return null
+      }
+
+      return result.data
+    } catch (error) {
+      console.error('TTS synthesis error:', error)
+      return null
+    } finally {
+      setIsSynthesizing(false)
+    }
+  }, [])
+
+  const playAudio = useCallback((url: string): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      if (audioRef.current) {
+        audioRef.current.pause()
+      }
+
+      const audio = new Audio(url)
+      audioRef.current = audio
+
+      audio.onplay = () => setIsSpeaking(true)
+      audio.onended = () => {
+        setIsSpeaking(false)
+        resolve()
+      }
+      audio.onerror = () => {
+        setIsSpeaking(false)
+        reject(new Error('Audio playback failed'))
+      }
+
+      audio.play().catch(reject)
+    })
+  }, [])
+
+  const speak = useCallback(async (text: string, voiceIdToUse: string) => {
+    const audioUrl = await synthesizeAndPlay(text, voiceIdToUse)
+    if (audioUrl) {
+      try {
+        await playAudio(audioUrl)
+      } catch (error) {
+        console.error('Playback error:', error)
+      }
+    }
+  }, [synthesizeAndPlay, playAudio])
+
+  const stop = useCallback(() => {
+    if (audioRef.current) {
+      audioRef.current.pause()
+      audioRef.current.currentTime = 0
+      audioRef.current = null
+    }
+    setIsSpeaking(false)
+    audioQueueRef.current = []
+    isPlayingQueueRef.current = false
+  }, [])
+
+  const pause = useCallback(() => {
+    if (audioRef.current) {
+      audioRef.current.pause()
+    }
+  }, [])
+
+  const resume = useCallback(() => {
+    if (audioRef.current) {
+      audioRef.current.play()
+    }
+  }, [])
 
   // Add story to history on mount
   useEffect(() => {
@@ -164,7 +251,7 @@ export default function StoryPage() {
       <PlaybackControls
         isPlaying={isSpeaking}
         isPaused={false}
-        isSynthesizing={false}
+        isSynthesizing={isSynthesizing}
         onPlay={handlePlay}
         onPause={handlePause}
         onStop={handleStop}

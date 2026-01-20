@@ -1,12 +1,47 @@
-import { useState, useEffect } from 'react'
+import { useState, useRef } from 'react'
+import { generateClient } from 'aws-amplify/data'
+import type { Schema } from '../../amplify/data/resource'
 import { useAppStore, PlaybackMode } from '../store/useAppStore'
-import { getAvailableVoices, VoiceOption } from '../hooks/useTextToSpeech'
 import styles from './SettingsPage.module.css'
+
+const client = generateClient<Schema>()
 
 const PLAYBACK_MODES: { value: PlaybackMode; label: string; description: string }[] = [
   { value: 'audio', label: 'Audio Only', description: 'Listen to the story being read aloud' },
   { value: 'text', label: 'Text Only', description: 'Read the story on screen' },
   { value: 'both', label: 'Audio + Text', description: 'Listen and read along' },
+]
+
+// Amazon Polly Neural Voices - natural sounding!
+interface PollyVoice {
+  id: string
+  name: string
+  accent: string
+  description: string
+}
+
+const POLLY_VOICES: PollyVoice[] = [
+  // Australian
+  { id: 'Olivia', name: 'Olivia', accent: 'Australian', description: 'Warm & natural' },
+
+  // British
+  { id: 'Amy', name: 'Amy', accent: 'British', description: 'Clear & friendly' },
+  { id: 'Emma', name: 'Emma', accent: 'British', description: 'Warm' },
+  { id: 'Brian', name: 'Brian', accent: 'British', description: 'Gentle' },
+  { id: 'Arthur', name: 'Arthur', accent: 'British', description: 'Warm' },
+
+  // American
+  { id: 'Ivy', name: 'Ivy', accent: 'American', description: 'Child-like (Recommended)' },
+  { id: 'Kevin', name: 'Kevin', accent: 'American', description: 'Boy voice' },
+  { id: 'Joanna', name: 'Joanna', accent: 'American', description: 'Warm & friendly' },
+  { id: 'Matthew', name: 'Matthew', accent: 'American', description: 'Gentle' },
+  { id: 'Ruth', name: 'Ruth', accent: 'American', description: 'Expressive' },
+  { id: 'Salli', name: 'Salli', accent: 'American', description: 'Friendly' },
+  { id: 'Joey', name: 'Joey', accent: 'American', description: 'Casual' },
+  { id: 'Kendra', name: 'Kendra', accent: 'American', description: 'Clear' },
+
+  // Indian
+  { id: 'Kajal', name: 'Kajal', accent: 'Indian', description: 'Warm' },
 ]
 
 export default function SettingsPage() {
@@ -20,68 +55,59 @@ export default function SettingsPage() {
     clearHistory,
   } = useAppStore()
 
-  const [voices, setVoices] = useState<VoiceOption[]>([])
   const [previewingVoice, setPreviewingVoice] = useState<string | null>(null)
+  const [previewError, setPreviewError] = useState<string | null>(null)
+  const audioRef = useRef<HTMLAudioElement | null>(null)
 
-  // Load available voices
-  useEffect(() => {
-    const loadVoices = () => {
-      const availableVoices = getAvailableVoices()
-      setVoices(availableVoices)
+  // Preview a voice using Polly
+  const previewVoice = async (voice: PollyVoice) => {
+    // Stop any current playback
+    if (audioRef.current) {
+      audioRef.current.pause()
+      audioRef.current = null
     }
 
-    // Load immediately
-    loadVoices()
+    setPreviewingVoice(voice.id)
+    setPreviewError(null)
 
-    // Also load when voices change (needed for some browsers)
-    if ('speechSynthesis' in window) {
-      window.speechSynthesis.onvoiceschanged = loadVoices
-    }
+    try {
+      const result = await client.queries.synthesizeSpeech({
+        text: `Hi there! I'm ${voice.name}. Let's brush those teeth and make them sparkle!`,
+        voiceId: voice.id,
+      })
 
-    // Cleanup
-    return () => {
-      if ('speechSynthesis' in window) {
-        window.speechSynthesis.cancel()
-      }
-    }
-  }, [])
-
-  // Preview a voice
-  const previewVoice = (voice: VoiceOption) => {
-    if ('speechSynthesis' in window) {
-      window.speechSynthesis.cancel()
-      setPreviewingVoice(voice.id)
-
-      const utterance = new SpeechSynthesisUtterance(
-        `Hi there! I'm ${voice.name}. Let's brush those teeth!`
-      )
-      utterance.rate = 0.85
-      utterance.pitch = 1.1
-
-      const allVoices = window.speechSynthesis.getVoices()
-      const selectedVoice = allVoices.find(v => v.name === voice.id)
-      if (selectedVoice) {
-        utterance.voice = selectedVoice
+      if (result.errors || !result.data) {
+        throw new Error(result.errors?.[0]?.message || 'Failed to generate preview')
       }
 
-      utterance.onend = () => setPreviewingVoice(null)
-      utterance.onerror = () => setPreviewingVoice(null)
+      const audio = new Audio(result.data)
+      audioRef.current = audio
 
-      window.speechSynthesis.speak(utterance)
+      audio.onended = () => setPreviewingVoice(null)
+      audio.onerror = () => {
+        setPreviewingVoice(null)
+        setPreviewError('Failed to play audio')
+      }
+
+      await audio.play()
+    } catch (error) {
+      console.error('Preview error:', error)
+      setPreviewingVoice(null)
+      setPreviewError('Failed to preview voice. Make sure you are online.')
     }
   }
 
   // Group voices by accent
-  const voicesByAccent = voices.reduce((acc, voice) => {
+  const voicesByAccent = POLLY_VOICES.reduce((acc, voice) => {
     if (!acc[voice.accent]) {
       acc[voice.accent] = []
     }
     acc[voice.accent].push(voice)
     return acc
-  }, {} as Record<string, VoiceOption[]>)
+  }, {} as Record<string, PollyVoice[]>)
 
   // Order accents with Australian first
-  const accentOrder = ['Australian', 'British', 'American', 'Canadian', 'Irish', 'Indian', 'New Zealand', 'South African']
+  const accentOrder = ['Australian', 'British', 'American', 'Indian']
   const sortedAccents = Object.keys(voicesByAccent).sort((a, b) => {
     const aIndex = accentOrder.indexOf(a)
     const bIndex = accentOrder.indexOf(b)
@@ -90,9 +116,6 @@ export default function SettingsPage() {
     if (bIndex === -1) return -1
     return aIndex - bIndex
   })
-
-  // Check if Australian voices are available
-  const hasAustralianVoices = voicesByAccent['Australian']?.length > 0
 
   return (
     <div className={styles.container}>
@@ -121,46 +144,42 @@ export default function SettingsPage() {
 
       <section className={styles.section}>
         <h2 className={styles.sectionTitle}>Voice Selection</h2>
-        <p className={styles.sectionHint}>Choose a voice for story narration (tap to preview)</p>
+        <p className={styles.sectionHint}>Natural AI voices powered by Amazon Polly (tap to preview)</p>
 
-        {voices.length === 0 ? (
-          <p className={styles.loadingVoices}>Loading available voices...</p>
-        ) : (
-          <>
-            {!hasAustralianVoices && (
-              <div className={styles.voiceTip}>
-                <strong>Want Australian voices?</strong>
-                <p>On Windows: Settings → Time & Language → Language → Add "English (Australia)"</p>
-                <p>On Mac: System Preferences → Accessibility → Spoken Content → System Voice → Manage Voices</p>
-              </div>
-            )}
-            {sortedAccents.map((accent) => (
-            <div key={accent} className={styles.accentGroup}>
-              <h3 className={styles.accentTitle}>
-                {accent === 'Australian' ? '🦘 ' : accent === 'British' ? '🇬🇧 ' : accent === 'American' ? '🇺🇸 ' : ''}
-                {accent}
-              </h3>
-              <div className={styles.voiceGrid}>
-                {voicesByAccent[accent].map((voice) => (
-                  <button
-                    key={voice.id}
-                    className={`${styles.voiceButton} ${voiceId === voice.id ? styles.selected : ''} ${previewingVoice === voice.id ? styles.previewing : ''}`}
-                    onClick={() => {
-                      setVoiceId(voice.id)
-                      previewVoice(voice)
-                    }}
-                  >
-                    <span className={styles.voiceName}>{voice.name}</span>
-                    {previewingVoice === voice.id && (
-                      <span className={styles.previewIndicator}>Playing...</span>
-                    )}
-                  </button>
-                ))}
-              </div>
-            </div>
-          ))}
-          </>
+        {previewError && (
+          <div className={styles.voiceTip}>
+            <strong>Preview failed</strong>
+            <p>{previewError}</p>
+          </div>
         )}
+
+        {sortedAccents.map((accent) => (
+          <div key={accent} className={styles.accentGroup}>
+            <h3 className={styles.accentTitle}>
+              {accent === 'Australian' ? '🦘 ' : accent === 'British' ? '🇬🇧 ' : accent === 'American' ? '🇺🇸 ' : accent === 'Indian' ? '🇮🇳 ' : ''}
+              {accent}
+            </h3>
+            <div className={styles.voiceGrid}>
+              {voicesByAccent[accent].map((voice) => (
+                <button
+                  key={voice.id}
+                  className={`${styles.voiceButton} ${voiceId === voice.id ? styles.selected : ''} ${previewingVoice === voice.id ? styles.previewing : ''}`}
+                  onClick={() => {
+                    setVoiceId(voice.id)
+                    previewVoice(voice)
+                  }}
+                  disabled={previewingVoice !== null}
+                >
+                  <span className={styles.voiceName}>{voice.name}</span>
+                  <span className={styles.voiceDescription}>{voice.description}</span>
+                  {previewingVoice === voice.id && (
+                    <span className={styles.previewIndicator}>Playing...</span>
+                  )}
+                </button>
+              ))}
+            </div>
+          </div>
+        ))}
       </section>
 
       <section className={styles.section}>

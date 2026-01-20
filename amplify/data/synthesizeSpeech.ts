@@ -4,13 +4,29 @@ import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 const pollyClient = new PollyClient({ region: process.env.AWS_REGION || 'us-east-1' });
 const s3Client = new S3Client({ region: process.env.AWS_REGION || 'us-east-1' });
 
-// Kid-friendly neural voices
-const VOICES: Record<string, { id: VoiceId; engine: Engine }> = {
-  Joanna: { id: VoiceId.Joanna, engine: Engine.NEURAL },    // Female, US English - warm and friendly
-  Matthew: { id: VoiceId.Matthew, engine: Engine.NEURAL },  // Male, US English - gentle
-  Ivy: { id: VoiceId.Ivy, engine: Engine.NEURAL },          // Child-like, US English - perfect for kids
-  Kendra: { id: VoiceId.Kendra, engine: Engine.NEURAL },    // Female, US English - clear
-  Ruth: { id: VoiceId.Ruth, engine: Engine.NEURAL },        // Female, US English - expressive
+// Kid-friendly neural voices with multiple accents
+const VOICES: Record<string, { id: VoiceId; engine: Engine; accent: string }> = {
+  // Australian English
+  Olivia: { id: VoiceId.Olivia, engine: Engine.NEURAL, accent: 'Australian' },  // Female, Australian - natural and warm
+
+  // British English
+  Amy: { id: VoiceId.Amy, engine: Engine.NEURAL, accent: 'British' },           // Female, British - clear and friendly
+  Emma: { id: VoiceId.Emma, engine: Engine.NEURAL, accent: 'British' },         // Female, British - warm
+  Brian: { id: VoiceId.Brian, engine: Engine.NEURAL, accent: 'British' },       // Male, British - gentle
+  Arthur: { id: VoiceId.Arthur, engine: Engine.NEURAL, accent: 'British' },     // Male, British - warm
+
+  // American English
+  Joanna: { id: VoiceId.Joanna, engine: Engine.NEURAL, accent: 'American' },    // Female, US - warm and friendly
+  Matthew: { id: VoiceId.Matthew, engine: Engine.NEURAL, accent: 'American' },  // Male, US - gentle
+  Ivy: { id: VoiceId.Ivy, engine: Engine.NEURAL, accent: 'American' },          // Child-like, US - perfect for kids
+  Kendra: { id: VoiceId.Kendra, engine: Engine.NEURAL, accent: 'American' },    // Female, US - clear
+  Ruth: { id: VoiceId.Ruth, engine: Engine.NEURAL, accent: 'American' },        // Female, US - expressive
+  Kevin: { id: VoiceId.Kevin, engine: Engine.NEURAL, accent: 'American' },      // Male child, US - great for kids
+  Salli: { id: VoiceId.Salli, engine: Engine.NEURAL, accent: 'American' },      // Female, US - friendly
+  Joey: { id: VoiceId.Joey, engine: Engine.NEURAL, accent: 'American' },        // Male, US - casual
+
+  // Indian English
+  Kajal: { id: VoiceId.Kajal, engine: Engine.NEURAL, accent: 'Indian' },        // Female, Indian English
 };
 
 type SynthesizeSpeechArgs = {

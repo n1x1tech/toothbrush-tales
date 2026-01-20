@@ -41,14 +41,14 @@ STORY STRUCTURE:
 
 IMPORTANT: Write a SINGLE CONTINUOUS STORY where each segment flows into the next. The story should feel like one complete adventure, not four separate mini-stories.
 
-Respond with ONLY this JSON (no other text):
+Respond with ONLY valid JSON (no other text, no markdown code blocks):
 {
-  "intro": "Get ready for an amazing adventure! This is the story of ${characterName} who is ${theme}. Put your toothbrush in your mouth, and let's go!",
+  "intro": "An exciting 1-2 sentence hook introducing the adventure",
   "segments": [
-    "SEGMENT 1 (~70 words): Begin the adventure. Where is ${characterName}? What exciting thing happens first? End with something that leads to segment 2.",
-    "SEGMENT 2 (~70 words): Continue the SAME story. What happens next? Who does ${characterName} meet or what challenge appears? End with a transition to segment 3.",
-    "SEGMENT 3 (~70 words): The most exciting part! What big moment happens? Keep the same characters and setting. End leading into the finale.",
-    "SEGMENT 4 (~70 words): Wrap up the adventure beautifully. How does ${characterName} succeed? Connect back to having sparkly clean teeth."
+    "First story paragraph (60-80 words) - ONLY story text, no labels or word counts",
+    "Second story paragraph (60-80 words) - continues the same adventure",
+    "Third story paragraph (60-80 words) - the exciting climax",
+    "Fourth story paragraph (60-80 words) - happy resolution"
   ],
   "brushingPrompts": [
     "Now brush your bottom teeth nice and clean!",
@@ -56,16 +56,19 @@ Respond with ONLY this JSON (no other text):
     "You're doing amazing! Brush the left side!",
     "Almost done! Brush the right side!"
   ],
-  "conclusion": "HOORAY! ${characterName} did it, and so did you! Your teeth are sparkling clean and super shiny! You're a brushing superstar! Great job!"
+  "conclusion": "A celebratory ending (1-2 sentences)"
 }
 
 CRITICAL RULES:
-- Each segment MUST be 60-80 words (count carefully!)
-- Story must be COHERENT - same characters, same adventure throughout
-- Include sound effects in EVERY segment
+- Each segment must contain ONLY the story text - NO labels like "Segment 1", NO word counts, NO formatting instructions
+- Each segment MUST be 60-80 words of pure story
+- Story must be COHERENT - same characters, same adventure throughout all 4 segments
+- Include fun sound effects in EVERY segment (WHOOSH! SPLASH! ZOOM! POP! SPARKLE!)
 - Mention ${characterName} by name 2-3 times per segment
-- Keep it silly, fun, and magical
-- NO scary content - only happy, exciting adventures`;
+- Keep it silly, fun, and magical for 4-year-olds
+- NO scary content - only happy, exciting adventures
+- The intro should be exciting and mention putting the toothbrush in their mouth
+- The conclusion should celebrate both the story ending AND their clean sparkly teeth`;
 
   const payload = {
     anthropic_version: 'bedrock-2023-05-31',
