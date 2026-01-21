@@ -43,9 +43,11 @@ export const handler = async (
   // Generative engine doesn't support SSML
   const isGenerative = voice.engine === Engine.GENERATIVE;
 
+  // Neural voices only support rate and volume in prosody (NOT pitch)
+  // Generative voices don't support SSML at all
   const speechText = isGenerative
     ? text
-    : `<speak><prosody rate="slow" pitch="+5%">${text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</prosody></speak>`;
+    : `<speak><prosody rate="slow">${text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</prosody></speak>`;
 
   try {
     const command = new SynthesizeSpeechCommand({
