@@ -50,11 +50,13 @@ export default function StoryPage() {
     return createFallbackStory()
   })
 
-  // Phases: 'intro' -> 'brushing' -> 'complete'
-  const [phase, setPhase] = useState<'intro' | 'brushing' | 'complete'>('intro')
+  // Phases: 'waiting' -> 'intro' -> 'brushing' -> 'complete'
+  // 'waiting' phase requires user tap to unlock audio on iOS
+  const [phase, setPhase] = useState<'waiting' | 'intro' | 'brushing' | 'complete'>('waiting')
   const [currentSegment, setCurrentSegment] = useState(0)
   const [spokenSegments, setSpokenSegments] = useState<Set<number>>(new Set())
   const hasSpokenIntro = useRef(false)
+  const audioUnlocked = useRef(false)
 
   // Polly TTS state
   const [isSpeaking, setIsSpeaking] = useState(false)
@@ -148,13 +150,7 @@ export default function StoryPage() {
     addToHistory(story)
   }, [story, addToHistory])
 
-  // Speak intro immediately on mount
-  useEffect(() => {
-    if (phase === 'intro' && autoPlay && (playbackMode === 'audio' || playbackMode === 'both') && !hasSpokenIntro.current) {
-      hasSpokenIntro.current = true
-      speak(story.intro, voiceId)
-    }
-  }, [phase, autoPlay, playbackMode, speak, story.intro, voiceId])
+  // Note: Intro speech is now triggered by handleStartStory to work on iOS
 
   // Transition from intro to brushing after INTRO_DURATION
   useEffect(() => {
@@ -243,8 +239,49 @@ export default function StoryPage() {
     toggleFavorite(story.id)
   }
 
+  // Handle tap to start - unlocks audio on iOS and starts the story
+  const handleStartStory = async () => {
+    // Unlock audio on iOS by playing a tiny silent sound from user gesture
+    if (!audioUnlocked.current) {
+      try {
+        const silentAudio = new Audio('data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=')
+        await silentAudio.play()
+        silentAudio.pause()
+        audioUnlocked.current = true
+      } catch (e) {
+        console.log('Audio unlock attempted')
+      }
+    }
+
+    // Move to intro phase and start speaking
+    setPhase('intro')
+
+    // Speak intro if audio is enabled
+    if (autoPlay && (playbackMode === 'audio' || playbackMode === 'both')) {
+      hasSpokenIntro.current = true
+      speak(story.intro, voiceId)
+    }
+  }
+
   // Convert phase to segment for StoryPlayer
   const displaySegment = phase === 'intro' ? -1 : currentSegment
+
+  // Show tap to start screen on mobile
+  if (phase === 'waiting') {
+    return (
+      <div className={styles.container}>
+        <div className={styles.waitingScreen}>
+          <h1 className={styles.waitingTitle}>Ready to Brush?</h1>
+          <p className={styles.waitingText}>
+            Get your toothbrush ready and tap the button to start your adventure!
+          </p>
+          <button className={styles.startButton} onClick={handleStartStory}>
+            Tap to Start!
+          </button>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className={styles.container}>

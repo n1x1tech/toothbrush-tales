@@ -77,3 +77,60 @@
     transform: scale(1.02);
   }
 }
+
+/* Waiting / Tap to Start screen */
+.waitingScreen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 2rem;
+  min-height: 60vh;
+  gap: 1.5rem;
+}
+
+.waitingTitle {
+  font-size: 2.5rem;
+  font-weight: 800;
+  color: var(--color-primary);
+  margin: 0;
+}
+
+.waitingText {
+  font-size: 1.2rem;
+  color: var(--color-text-light);
+  max-width: 300px;
+  line-height: 1.5;
+}
+
+.startButton {
+  background: linear-gradient(135deg, var(--color-primary), #FF8E8E);
+  color: white;
+  font-size: 1.8rem;
+  font-weight: 800;
+  padding: 1.5rem 3rem;
+  border-radius: 50px;
+  border: none;
+  cursor: pointer;
+  box-shadow: 0 8px 20px rgba(255, 107, 107, 0.4);
+  animation: pulseGlow 2s infinite;
+  transition: transform 0.2s;
+}
+
+.startButton:hover {
+  transform: scale(1.05);
+}
+
+.startButton:active {
+  transform: scale(0.98);
+}
+
+@keyframes pulseGlow {
+  0%, 100% {
+    box-shadow: 0 8px 20px rgba(255, 107, 107, 0.4);
+  }
+  50% {
+    box-shadow: 0 8px 30px rgba(255, 107, 107, 0.6);
+  }
+}
