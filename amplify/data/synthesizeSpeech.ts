@@ -1,5 +1,6 @@
 import { PollyClient, SynthesizeSpeechCommand, VoiceId, Engine } from '@aws-sdk/client-polly';
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 const pollyClient = new PollyClient({ region: process.env.AWS_REGION || 'us-east-1' });
 const s3Client = new S3Client({ region: process.env.AWS_REGION || 'us-east-1' });
@@ -107,8 +108,14 @@ export const handler = async (
       CacheControl: 'max-age=86400', // Cache for 1 day
     }));
 
-    // Return the S3 URL
-    return `https://${bucketName}.s3.${process.env.AWS_REGION || 'us-east-1'}.amazonaws.com/${audioKey}`;
+    // Generate a pre-signed URL (valid for 1 hour) so browser can access the file
+    const getCommand = new GetObjectCommand({
+      Bucket: bucketName,
+      Key: audioKey,
+    });
+    const presignedUrl = await getSignedUrl(s3Client, getCommand, { expiresIn: 3600 });
+
+    return presignedUrl;
   } catch (error) {
     console.error('Error synthesizing speech:', error);
     throw new Error(`Failed to synthesize speech: ${error instanceof Error ? error.message : 'Unknown error'}`);
