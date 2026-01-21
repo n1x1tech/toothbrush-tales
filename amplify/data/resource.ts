@@ -71,7 +71,7 @@ const schema = a.schema({
     })
     .returns(a.string())
     .handler(a.handler.function(synthesizeSpeechFunction))
-    .authorization((allow) => [allow.authenticated()]),
+    .authorization((allow) => [allow.authenticated(), allow.guest()]),
 });
 
 export type Schema = ClientSchema<typeof schema>;
