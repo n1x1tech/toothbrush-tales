@@ -4,29 +4,30 @@ import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 const pollyClient = new PollyClient({ region: process.env.AWS_REGION || 'us-east-1' });
 const s3Client = new S3Client({ region: process.env.AWS_REGION || 'us-east-1' });
 
-// Kid-friendly neural voices with multiple accents
+// Kid-friendly voices with correct engines for each voice
+// Note: Some voices require 'generative' engine, others 'neural', some only 'standard'
 const VOICES: Record<string, { id: VoiceId; engine: Engine; accent: string }> = {
-  // Australian English
-  Olivia: { id: VoiceId.Olivia, engine: Engine.NEURAL, accent: 'Australian' },  // Female, Australian - natural and warm
+  // Australian English - Olivia requires generative engine
+  Olivia: { id: VoiceId.Olivia, engine: Engine.GENERATIVE, accent: 'Australian' },
 
   // British English
-  Amy: { id: VoiceId.Amy, engine: Engine.NEURAL, accent: 'British' },           // Female, British - clear and friendly
-  Emma: { id: VoiceId.Emma, engine: Engine.NEURAL, accent: 'British' },         // Female, British - warm
-  Brian: { id: VoiceId.Brian, engine: Engine.NEURAL, accent: 'British' },       // Male, British - gentle
-  Arthur: { id: VoiceId.Arthur, engine: Engine.NEURAL, accent: 'British' },     // Male, British - warm
+  Amy: { id: VoiceId.Amy, engine: Engine.NEURAL, accent: 'British' },
+  Emma: { id: VoiceId.Emma, engine: Engine.NEURAL, accent: 'British' },
+  Brian: { id: VoiceId.Brian, engine: Engine.NEURAL, accent: 'British' },
+  Arthur: { id: VoiceId.Arthur, engine: Engine.NEURAL, accent: 'British' },
 
   // American English
-  Joanna: { id: VoiceId.Joanna, engine: Engine.NEURAL, accent: 'American' },    // Female, US - warm and friendly
-  Matthew: { id: VoiceId.Matthew, engine: Engine.NEURAL, accent: 'American' },  // Male, US - gentle
-  Ivy: { id: VoiceId.Ivy, engine: Engine.NEURAL, accent: 'American' },          // Child-like, US - perfect for kids
-  Kendra: { id: VoiceId.Kendra, engine: Engine.NEURAL, accent: 'American' },    // Female, US - clear
-  Ruth: { id: VoiceId.Ruth, engine: Engine.NEURAL, accent: 'American' },        // Female, US - expressive
-  Kevin: { id: VoiceId.Kevin, engine: Engine.NEURAL, accent: 'American' },      // Male child, US - great for kids
-  Salli: { id: VoiceId.Salli, engine: Engine.NEURAL, accent: 'American' },      // Female, US - friendly
-  Joey: { id: VoiceId.Joey, engine: Engine.NEURAL, accent: 'American' },        // Male, US - casual
+  Joanna: { id: VoiceId.Joanna, engine: Engine.NEURAL, accent: 'American' },
+  Matthew: { id: VoiceId.Matthew, engine: Engine.NEURAL, accent: 'American' },
+  Ivy: { id: VoiceId.Ivy, engine: Engine.NEURAL, accent: 'American' },
+  Kendra: { id: VoiceId.Kendra, engine: Engine.NEURAL, accent: 'American' },
+  Ruth: { id: VoiceId.Ruth, engine: Engine.GENERATIVE, accent: 'American' },    // Ruth requires generative
+  Kevin: { id: VoiceId.Kevin, engine: Engine.NEURAL, accent: 'American' },
+  Salli: { id: VoiceId.Salli, engine: Engine.NEURAL, accent: 'American' },
+  Joey: { id: VoiceId.Joey, engine: Engine.NEURAL, accent: 'American' },
 
   // Indian English
-  Kajal: { id: VoiceId.Kajal, engine: Engine.NEURAL, accent: 'Indian' },        // Female, Indian English
+  Kajal: { id: VoiceId.Kajal, engine: Engine.NEURAL, accent: 'Indian' },
 };
 
 type SynthesizeSpeechArgs = {
@@ -50,17 +51,19 @@ export const handler = async (
   // Get voice configuration or default to Joanna
   const voice = VOICES[voiceId] || VOICES['Joanna'];
 
-  // Wrap text in SSML to slow down speech for young listeners
-  const ssmlText = `<speak>
-    <prosody rate="slow" pitch="+5%">
-      ${text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}
-    </prosody>
-  </speak>`;
+  // Generative engine doesn't support SSML, so use plain text for those voices
+  const isGenerative = voice.engine === Engine.GENERATIVE;
+
+  // For neural/standard, use SSML to slow down speech for young listeners
+  // For generative, use plain text (it already sounds natural)
+  const speechText = isGenerative
+    ? text
+    : `<speak><prosody rate="slow" pitch="+5%">${text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</prosody></speak>`;
 
   try {
     const command = new SynthesizeSpeechCommand({
-      Text: ssmlText,
-      TextType: 'ssml',
+      Text: speechText,
+      TextType: isGenerative ? 'text' : 'ssml',
       OutputFormat: 'mp3',
       VoiceId: voice.id,
       Engine: voice.engine,
