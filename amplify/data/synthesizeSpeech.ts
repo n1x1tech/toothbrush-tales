@@ -83,9 +83,10 @@ export const handler = async (
 
     const audioBuffer = Buffer.concat(chunks);
 
-    // Generate unique filename
+    // Generate unique filename - save to public path for browser access
     const timestamp = Date.now();
-    const audioKey = `audio/${userId}/${timestamp}.mp3`;
+    const randomId = Math.random().toString(36).substring(2, 8);
+    const audioKey = `public/audio/${timestamp}-${randomId}.mp3`;
 
     // Get bucket name from environment
     const bucketName = process.env.STORAGE_BUCKET_NAME;
