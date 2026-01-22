@@ -286,12 +286,9 @@ export default function StoryPage() {
             Get your toothbrush ready and tap the button to start your adventure!
           </p>
           <button
+            type="button"
             className={styles.startButton}
             onClick={handleStartStory}
-            onTouchEnd={(e) => {
-              e.preventDefault()
-              handleStartStory()
-            }}
           >
             Tap to Start!
           </button>
