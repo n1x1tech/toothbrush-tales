@@ -62,11 +62,11 @@ export default function StoryPage() {
   const [isSpeaking, setIsSpeaking] = useState(false)
   const [isSynthesizing, setIsSynthesizing] = useState(false)
   const audioRef = useRef<HTMLAudioElement | null>(null)
-  const audioQueueRef = useRef<string[]>([])
-  const isPlayingQueueRef = useRef(false)
+  const audioQueueRef = useRef<{ text: string; voiceId: string }[]>([])
+  const isProcessingQueueRef = useRef(false)
 
-  // Polly TTS functions
-  const synthesizeAndPlay = useCallback(async (text: string, voiceIdToUse: string) => {
+  // Synthesize text to audio URL
+  const synthesize = useCallback(async (text: string, voiceIdToUse: string): Promise<string | null> => {
     setIsSynthesizing(true)
     try {
       const result = await client.queries.synthesizeSpeech({
@@ -88,60 +88,96 @@ export default function StoryPage() {
     }
   }, [])
 
-  const playAudio = useCallback((url: string): Promise<void> => {
+  // Play a single audio URL and return a promise that resolves when done
+  const playAudioUrl = useCallback((url: string): Promise<void> => {
     return new Promise((resolve, reject) => {
-      if (audioRef.current) {
-        audioRef.current.pause()
-      }
-
       const audio = new Audio(url)
       audioRef.current = audio
 
       audio.onplay = () => setIsSpeaking(true)
       audio.onended = () => {
         setIsSpeaking(false)
+        audioRef.current = null
         resolve()
       }
       audio.onerror = () => {
         setIsSpeaking(false)
+        audioRef.current = null
         reject(new Error('Audio playback failed'))
       }
 
-      audio.play().catch(reject)
+      audio.play().catch((err) => {
+        audioRef.current = null
+        reject(err)
+      })
     })
   }, [])
 
-  const speak = useCallback(async (text: string, voiceIdToUse: string) => {
-    const audioUrl = await synthesizeAndPlay(text, voiceIdToUse)
+  // Process the audio queue sequentially
+  const processQueue = useCallback(async () => {
+    if (isProcessingQueueRef.current) return
+    isProcessingQueueRef.current = true
+
+    while (audioQueueRef.current.length > 0) {
+      const item = audioQueueRef.current.shift()
+      if (!item) break
+
+      try {
+        const audioUrl = await synthesize(item.text, item.voiceId)
+        if (audioUrl) {
+          await playAudioUrl(audioUrl)
+        }
+      } catch (error) {
+        console.error('Queue playback error:', error)
+      }
+    }
+
+    isProcessingQueueRef.current = false
+  }, [synthesize, playAudioUrl])
+
+  // Add text to queue and start processing
+  const queueSpeech = useCallback((text: string, voiceIdToUse: string) => {
+    audioQueueRef.current.push({ text, voiceId: voiceIdToUse })
+    processQueue()
+  }, [processQueue])
+
+  // Speak immediately (used for manual play button)
+  const speakNow = useCallback(async (text: string, voiceIdToUse: string) => {
+    const audioUrl = await synthesize(text, voiceIdToUse)
     if (audioUrl) {
       try {
-        await playAudio(audioUrl)
+        await playAudioUrl(audioUrl)
       } catch (error) {
         console.error('Playback error:', error)
       }
     }
-  }, [synthesizeAndPlay, playAudio])
+  }, [synthesize, playAudioUrl])
 
   const stop = useCallback(() => {
+    // Clear the queue
+    audioQueueRef.current = []
+    isProcessingQueueRef.current = false
+
+    // Stop current audio
     if (audioRef.current) {
       audioRef.current.pause()
       audioRef.current.currentTime = 0
       audioRef.current = null
     }
     setIsSpeaking(false)
-    audioQueueRef.current = []
-    isPlayingQueueRef.current = false
   }, [])
 
   const pause = useCallback(() => {
     if (audioRef.current) {
       audioRef.current.pause()
+      setIsSpeaking(false)
     }
   }, [])
 
   const resume = useCallback(() => {
     if (audioRef.current) {
       audioRef.current.play()
+      setIsSpeaking(true)
     }
   }, [])
 
@@ -180,24 +216,24 @@ export default function StoryPage() {
       (playbackMode === 'audio' || playbackMode === 'both') &&
       !spokenSegments.has(currentSegment)
     ) {
-      // Speak brushing prompt + segment text
+      // Queue brushing prompt + segment text (won't interrupt current playback)
       const promptText = story.brushingPrompts[currentSegment] || ''
       const segmentText = story.segments[currentSegment] || ''
 
       if (segmentText) {
         const fullText = promptText ? `${promptText}... ${segmentText}` : segmentText
-        speak(fullText, voiceId)
+        queueSpeech(fullText, voiceId)
         setSpokenSegments(prev => new Set(prev).add(currentSegment))
       }
     }
-  }, [currentSegment, phase, autoPlay, playbackMode, speak, spokenSegments, story.brushingPrompts, story.segments, voiceId])
+  }, [currentSegment, phase, autoPlay, playbackMode, queueSpeech, spokenSegments, story.brushingPrompts, story.segments, voiceId])
 
-  // Speak conclusion when complete
+  // Queue conclusion when complete
   useEffect(() => {
     if (phase === 'complete' && autoPlay && (playbackMode === 'audio' || playbackMode === 'both')) {
-      speak(story.conclusion, voiceId)
+      queueSpeech(story.conclusion, voiceId)
     }
-  }, [phase, autoPlay, playbackMode, speak, story.conclusion, voiceId])
+  }, [phase, autoPlay, playbackMode, queueSpeech, story.conclusion, voiceId])
 
   // Cleanup on unmount
   useEffect(() => {
@@ -223,7 +259,7 @@ export default function StoryPage() {
     if (isSpeaking) {
       resume()
     } else {
-      speak(getCurrentText(), voiceId)
+      speakNow(getCurrentText(), voiceId)
     }
   }
 
@@ -264,12 +300,10 @@ export default function StoryPage() {
       }
     }
 
-    // Speak intro if audio is enabled (fire and forget)
+    // Queue intro speech if audio is enabled
     if (autoPlay && (playbackMode === 'audio' || playbackMode === 'both')) {
       hasSpokenIntro.current = true
-      speak(story.intro, voiceId).catch(() => {
-        // Ignore speech errors on initial start
-      })
+      queueSpeech(story.intro, voiceId)
     }
   }
 
