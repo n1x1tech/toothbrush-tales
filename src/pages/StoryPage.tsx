@@ -240,26 +240,36 @@ export default function StoryPage() {
   }
 
   // Handle tap to start - unlocks audio on iOS and starts the story
-  const handleStartStory = async () => {
+  const handleStartStory = () => {
+    // Move to intro phase IMMEDIATELY (synchronously)
+    setPhase('intro')
+
     // Unlock audio on iOS by playing a tiny silent sound from user gesture
+    // Do this without awaiting to prevent blocking
     if (!audioUnlocked.current) {
       try {
         const silentAudio = new Audio('data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=')
-        await silentAudio.play()
-        silentAudio.pause()
-        audioUnlocked.current = true
+        silentAudio.play()
+          .then(() => {
+            silentAudio.pause()
+            audioUnlocked.current = true
+          })
+          .catch(() => {
+            // Audio unlock failed, but continue anyway
+            audioUnlocked.current = true
+          })
       } catch (e) {
-        console.log('Audio unlock attempted')
+        // Ignore errors, continue with the story
+        audioUnlocked.current = true
       }
     }
 
-    // Move to intro phase and start speaking
-    setPhase('intro')
-
-    // Speak intro if audio is enabled
+    // Speak intro if audio is enabled (fire and forget)
     if (autoPlay && (playbackMode === 'audio' || playbackMode === 'both')) {
       hasSpokenIntro.current = true
-      speak(story.intro, voiceId)
+      speak(story.intro, voiceId).catch(() => {
+        // Ignore speech errors on initial start
+      })
     }
   }
 
@@ -275,7 +285,14 @@ export default function StoryPage() {
           <p className={styles.waitingText}>
             Get your toothbrush ready and tap the button to start your adventure!
           </p>
-          <button className={styles.startButton} onClick={handleStartStory}>
+          <button
+            className={styles.startButton}
+            onClick={handleStartStory}
+            onTouchEnd={(e) => {
+              e.preventDefault()
+              handleStartStory()
+            }}
+          >
             Tap to Start!
           </button>
         </div>
