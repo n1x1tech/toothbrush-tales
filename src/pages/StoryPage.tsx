@@ -115,29 +115,43 @@ export default function StoryPage() {
 
   // Process the audio queue sequentially
   const processQueue = useCallback(async () => {
-    if (isProcessingQueueRef.current) return
+    if (isProcessingQueueRef.current) {
+      console.log('[TTS] processQueue already running, skipping')
+      return
+    }
     isProcessingQueueRef.current = true
+    console.log('[TTS] processQueue started')
 
     while (audioQueueRef.current.length > 0) {
       const item = audioQueueRef.current.shift()
       if (!item) break
 
+      console.log('[TTS] Processing item:', item.text.substring(0, 50) + '...')
+
       try {
         const audioUrl = await synthesize(item.text, item.voiceId)
         if (audioUrl) {
+          console.log('[TTS] Got audio URL, playing...')
           await playAudioUrl(audioUrl)
+          console.log('[TTS] Playback complete')
+        } else {
+          console.error('[TTS] synthesize returned null')
         }
       } catch (error) {
-        console.error('Queue playback error:', error)
+        console.error('[TTS] Queue playback error:', error)
       }
     }
 
+    console.log('[TTS] processQueue finished, queue empty')
     isProcessingQueueRef.current = false
   }, [synthesize, playAudioUrl])
 
   // Add text to queue and start processing
   const queueSpeech = useCallback((text: string, voiceIdToUse: string) => {
+    console.log('[TTS] queueSpeech called:', text.substring(0, 50) + '...', 'voice:', voiceIdToUse)
+    console.log('[TTS] Queue length before push:', audioQueueRef.current.length)
     audioQueueRef.current.push({ text, voiceId: voiceIdToUse })
+    console.log('[TTS] Queue length after push:', audioQueueRef.current.length)
     processQueue()
   }, [processQueue])
 
@@ -210,6 +224,7 @@ export default function StoryPage() {
 
   // Auto-play TTS when segment changes during brushing phase
   useEffect(() => {
+    console.log('[TTS] Auto-play effect:', { phase, currentSegment, autoPlay, playbackMode, hasSpoken: spokenSegments.has(currentSegment) })
     if (
       phase === 'brushing' &&
       autoPlay &&
@@ -220,6 +235,7 @@ export default function StoryPage() {
       const promptText = story.brushingPrompts[currentSegment] || ''
       const segmentText = story.segments[currentSegment] || ''
 
+      console.log('[TTS] Conditions met, queueing segment', currentSegment)
       if (segmentText) {
         const fullText = promptText ? `${promptText}... ${segmentText}` : segmentText
         queueSpeech(fullText, voiceId)
