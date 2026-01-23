@@ -61,19 +61,23 @@ export default function StoryPage() {
   // Polly TTS state
   const [isSpeaking, setIsSpeaking] = useState(false)
   const [isSynthesizing, setIsSynthesizing] = useState(false)
-  // Use a persistent audio element to maintain user gesture context
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const audioQueueRef = useRef<{ text: string; voiceId: string }[]>([])
   const isProcessingQueueRef = useRef(false)
 
-  // Create persistent audio element on mount
+  // Create audio element on mount - attached to DOM with explicit properties
   useEffect(() => {
-    const audio = new Audio()
+    const audio = document.createElement('audio')
     audio.preload = 'auto'
+    audio.volume = 1
+    audio.muted = false
+    audio.style.display = 'none'
+    document.body.appendChild(audio)
     audioRef.current = audio
-    console.log('[TTS] Persistent audio element created')
+    console.log('[TTS] Audio element created and attached to DOM')
     return () => {
       audio.pause()
+      audio.remove()
       audioRef.current = null
     }
   }, [])
@@ -116,40 +120,74 @@ export default function StoryPage() {
         return
       }
 
-      // Clear previous handlers
+      // Clear ALL previous handlers to prevent memory leaks and conflicts
+      audio.oncanplaythrough = null
       audio.onloadedmetadata = null
       audio.onplay = null
       audio.onended = null
       audio.onerror = null
+      audio.onabort = null
 
-      // Set up new handlers
+      // Ensure audio properties are correct
+      audio.volume = 1
+      audio.muted = false
+      audio.currentTime = 0
+
+      let hasStartedPlaying = false
+      let hasEnded = false
+
+      const cleanup = () => {
+        audio.oncanplaythrough = null
+        audio.onloadedmetadata = null
+        audio.onplay = null
+        audio.onended = null
+        audio.onerror = null
+        audio.onabort = null
+      }
+
       audio.onloadedmetadata = () => {
         console.log('[TTS] Audio metadata loaded, duration:', audio.duration, 'seconds')
       }
+
+      audio.oncanplaythrough = () => {
+        if (hasStartedPlaying) return
+        hasStartedPlaying = true
+        console.log('[TTS] canplaythrough fired, starting playback')
+
+        audio.play().then(() => {
+          console.log('[TTS] audio.play() promise resolved')
+        }).catch((err) => {
+          console.error('[TTS] audio.play() rejected:', err)
+          cleanup()
+          reject(err)
+        })
+      }
+
       audio.onplay = () => {
         console.log('[TTS] Audio onplay fired')
         setIsSpeaking(true)
       }
+
       audio.onended = () => {
+        if (hasEnded) return
+        hasEnded = true
         console.log('[TTS] Audio onended fired, played duration:', audio.currentTime)
         setIsSpeaking(false)
-        resolve()
+        cleanup()
+        // Add delay before resolving to give browser time to cleanup
+        setTimeout(() => resolve(), 150)
       }
+
       audio.onerror = (e) => {
         console.error('[TTS] Audio onerror:', e, audio.error)
         setIsSpeaking(false)
+        cleanup()
         reject(new Error('Audio playback failed'))
       }
 
-      // Set source and play
+      // Set source - this triggers loading automatically
+      console.log('[TTS] Setting audio src')
       audio.src = url
-      audio.load()
-      audio.play().then(() => {
-        console.log('[TTS] audio.play() promise resolved')
-      }).catch((err) => {
-        console.error('[TTS] audio.play() rejected:', err)
-        reject(err)
-      })
     })
   }, [])
 
@@ -174,11 +212,15 @@ export default function StoryPage() {
           console.log('[TTS] Got audio URL, playing...')
           await playAudioUrl(audioUrl)
           console.log('[TTS] Playback complete')
+          // Small delay between items to let browser stabilize
+          await new Promise(resolve => setTimeout(resolve, 100))
         } else {
           console.error('[TTS] synthesize returned null')
         }
       } catch (error) {
         console.error('[TTS] Queue playback error:', error)
+        // On error, wait before trying next item
+        await new Promise(resolve => setTimeout(resolve, 200))
       }
     }
 
@@ -336,43 +378,36 @@ export default function StoryPage() {
     toggleFavorite(story.id)
   }
 
-  // Handle tap to start - unlocks audio on iOS and starts the story
-  const handleStartStory = () => {
+  // Handle tap to start - starts the story with audio from user gesture
+  const handleStartStory = async () => {
     console.log('[TTS] handleStartStory called')
     console.log('[TTS] Settings:', { autoPlay, playbackMode, voiceId })
 
     // Move to intro phase IMMEDIATELY (synchronously)
     setPhase('intro')
 
-    // Unlock audio by playing a tiny silent sound on the PERSISTENT audio element
-    // This associates the user gesture with our audio element
-    if (!audioUnlocked.current && audioRef.current) {
-      try {
-        const audio = audioRef.current
-        audio.src = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA='
-        audio.play()
-          .then(() => {
-            console.log('[TTS] Audio element unlocked successfully')
-            audioUnlocked.current = true
-          })
-          .catch((e) => {
-            console.warn('[TTS] Audio unlock failed:', e)
-            audioUnlocked.current = true
-          })
-      } catch (e) {
-        console.warn('[TTS] Audio unlock exception:', e)
-        audioUnlocked.current = true
-      }
-    }
+    // Check if audio should be played
+    const shouldPlayAudio = autoPlay && (playbackMode === 'audio' || playbackMode === 'both')
+    console.log('[TTS] Should play audio:', shouldPlayAudio)
 
-    // Queue intro speech if audio is enabled
-    console.log('[TTS] Checking audio conditions:', { autoPlay, playbackMode, shouldQueue: autoPlay && (playbackMode === 'audio' || playbackMode === 'both') })
-    if (autoPlay && (playbackMode === 'audio' || playbackMode === 'both')) {
-      console.log('[TTS] Queueing intro speech')
+    if (shouldPlayAudio) {
       hasSpokenIntro.current = true
-      queueSpeech(story.intro, voiceId)
-    } else {
-      console.log('[TTS] Audio disabled - autoPlay:', autoPlay, 'playbackMode:', playbackMode)
+      audioUnlocked.current = true
+
+      // CRITICAL: Start synthesis and playback directly from user gesture
+      // Do NOT use queueSpeech for the intro - play it directly to maintain gesture context
+      console.log('[TTS] Starting intro synthesis directly from user tap')
+
+      try {
+        const audioUrl = await synthesize(story.intro, voiceId)
+        if (audioUrl) {
+          console.log('[TTS] Intro synthesized, playing directly')
+          await playAudioUrl(audioUrl)
+          console.log('[TTS] Intro playback complete')
+        }
+      } catch (error) {
+        console.error('[TTS] Intro playback error:', error)
+      }
     }
   }
 
