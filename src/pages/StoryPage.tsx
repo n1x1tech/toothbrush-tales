@@ -61,18 +61,35 @@ export default function StoryPage() {
   // Polly TTS state
   const [isSpeaking, setIsSpeaking] = useState(false)
   const [isSynthesizing, setIsSynthesizing] = useState(false)
+  const [ttsError, setTtsError] = useState<string | null>(null)
   const audioRef = useRef<HTMLAudioElement | null>(null)
-  const audioQueueRef = useRef<{ text: string; voiceId: string }[]>([])
+  const audioQueueRef = useRef<{ text: string; voiceId: string; retries: number }[]>([])
   const isProcessingQueueRef = useRef(false)
+  const introAudioDoneRef = useRef(false)
 
-  // Synthesize text to audio URL
+  // Constants for retry and timeout
+  const MAX_RETRIES = 2
+  const SYNTHESIS_TIMEOUT = 15000 // 15 seconds
+
+  // Synthesize text to audio URL with timeout protection
   const synthesize = useCallback(async (text: string, voiceIdToUse: string): Promise<string | null> => {
     setIsSynthesizing(true)
+    setTtsError(null)
+
     try {
-      const result = await client.queries.synthesizeSpeech({
-        text,
-        voiceId: voiceIdToUse,
+      // Create a timeout promise
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error('Synthesis timeout')), SYNTHESIS_TIMEOUT)
       })
+
+      // Race between the actual call and timeout
+      const result = await Promise.race([
+        client.queries.synthesizeSpeech({
+          text,
+          voiceId: voiceIdToUse,
+        }),
+        timeoutPromise
+      ])
 
       if (result.errors || !result.data) {
         console.error('TTS error:', result.errors)
@@ -113,22 +130,51 @@ export default function StoryPage() {
     })
   }, [])
 
-  // Process the audio queue sequentially
+  // Process the audio queue sequentially with retry logic
   const processQueue = useCallback(async () => {
     if (isProcessingQueueRef.current) return
     isProcessingQueueRef.current = true
 
     while (audioQueueRef.current.length > 0) {
-      const item = audioQueueRef.current.shift()
+      const item = audioQueueRef.current[0] // Peek, don't shift yet
       if (!item) break
 
       try {
         const audioUrl = await synthesize(item.text, item.voiceId)
         if (audioUrl) {
           await playAudioUrl(audioUrl)
+          // Success - remove from queue
+          audioQueueRef.current.shift()
+          setTtsError(null)
+
+          // Mark intro as done if this was the first item (intro)
+          if (!introAudioDoneRef.current) {
+            introAudioDoneRef.current = true
+          }
+        } else {
+          // Synthesis returned null - retry or skip
+          if (item.retries < MAX_RETRIES) {
+            console.warn(`Retrying synthesis (attempt ${item.retries + 1}/${MAX_RETRIES})`)
+            item.retries++
+            // Wait a bit before retry
+            await new Promise(resolve => setTimeout(resolve, 1000))
+          } else {
+            // Max retries reached - skip this item
+            console.error('Max retries reached, skipping item')
+            audioQueueRef.current.shift()
+            setTtsError('Audio temporarily unavailable. Story will continue in text mode.')
+          }
         }
       } catch (error) {
         console.error('Queue playback error:', error)
+        // Retry on playback error
+        if (item.retries < MAX_RETRIES) {
+          item.retries++
+          await new Promise(resolve => setTimeout(resolve, 1000))
+        } else {
+          audioQueueRef.current.shift()
+          setTtsError('Audio playback failed. Story will continue in text mode.')
+        }
       }
     }
 
@@ -137,7 +183,7 @@ export default function StoryPage() {
 
   // Add text to queue and start processing
   const queueSpeech = useCallback((text: string, voiceIdToUse: string) => {
-    audioQueueRef.current.push({ text, voiceId: voiceIdToUse })
+    audioQueueRef.current.push({ text, voiceId: voiceIdToUse, retries: 0 })
     processQueue()
   }, [processQueue])
 
@@ -157,6 +203,7 @@ export default function StoryPage() {
     // Clear the queue
     audioQueueRef.current = []
     isProcessingQueueRef.current = false
+    introAudioDoneRef.current = false
 
     // Stop current audio
     if (audioRef.current) {
@@ -165,6 +212,7 @@ export default function StoryPage() {
       audioRef.current = null
     }
     setIsSpeaking(false)
+    setTtsError(null)
   }, [])
 
   const pause = useCallback(() => {
@@ -188,15 +236,35 @@ export default function StoryPage() {
 
   // Note: Intro speech is now triggered by handleStartStory to work on iOS
 
-  // Transition from intro to brushing after INTRO_DURATION
+  // Transition from intro to brushing when intro audio finishes (or after max wait time)
   useEffect(() => {
     if (phase === 'intro') {
-      const timer = setTimeout(() => {
-        setPhase('brushing')
-      }, INTRO_DURATION)
-      return () => clearTimeout(timer)
+      let transitioned = false
+
+      // Check periodically if intro audio is done
+      const checkInterval = setInterval(() => {
+        if (introAudioDoneRef.current && !isSpeaking && !transitioned) {
+          transitioned = true
+          clearInterval(checkInterval)
+          setPhase('brushing')
+        }
+      }, 500)
+
+      // Fallback: transition after max wait time regardless
+      const maxWaitTimer = setTimeout(() => {
+        if (!transitioned) {
+          transitioned = true
+          clearInterval(checkInterval)
+          setPhase('brushing')
+        }
+      }, INTRO_DURATION + 10000) // Give extra 10 seconds beyond base duration
+
+      return () => {
+        clearInterval(checkInterval)
+        clearTimeout(maxWaitTimer)
+      }
     }
-  }, [phase])
+  }, [phase, isSpeaking])
 
   // Get current text to speak
   const getCurrentText = useCallback(() => {
@@ -277,6 +345,10 @@ export default function StoryPage() {
 
   // Handle tap to start - unlocks audio on iOS and starts the story
   const handleStartStory = () => {
+    // Reset audio tracking
+    introAudioDoneRef.current = false
+    setTtsError(null)
+
     // Move to intro phase IMMEDIATELY (synchronously)
     setPhase('intro')
 
@@ -333,6 +405,13 @@ export default function StoryPage() {
 
   return (
     <div className={styles.container}>
+      {ttsError && (
+        <div className={styles.errorBanner} onClick={() => setTtsError(null)}>
+          {ttsError}
+          <span className={styles.dismissError}>✕</span>
+        </div>
+      )}
+
       <PlaybackControls
         isPlaying={isSpeaking}
         isPaused={false}
