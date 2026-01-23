@@ -293,6 +293,9 @@ export default function StoryPage() {
 
   // Handle tap to start - unlocks audio on iOS and starts the story
   const handleStartStory = () => {
+    console.log('[TTS] handleStartStory called')
+    console.log('[TTS] Settings:', { autoPlay, playbackMode, voiceId })
+
     // Move to intro phase IMMEDIATELY (synchronously)
     setPhase('intro')
 
@@ -317,9 +320,13 @@ export default function StoryPage() {
     }
 
     // Queue intro speech if audio is enabled
+    console.log('[TTS] Checking audio conditions:', { autoPlay, playbackMode, shouldQueue: autoPlay && (playbackMode === 'audio' || playbackMode === 'both') })
     if (autoPlay && (playbackMode === 'audio' || playbackMode === 'both')) {
+      console.log('[TTS] Queueing intro speech')
       hasSpokenIntro.current = true
       queueSpeech(story.intro, voiceId)
+    } else {
+      console.log('[TTS] Audio disabled - autoPlay:', autoPlay, 'playbackMode:', playbackMode)
     }
   }
 
