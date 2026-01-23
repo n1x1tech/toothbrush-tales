@@ -67,6 +67,7 @@ export default function StoryPage() {
 
   // Synthesize text to audio URL
   const synthesize = useCallback(async (text: string, voiceIdToUse: string): Promise<string | null> => {
+    console.log('[TTS] synthesize called for voice:', voiceIdToUse)
     setIsSynthesizing(true)
     try {
       const result = await client.queries.synthesizeSpeech({
@@ -74,14 +75,16 @@ export default function StoryPage() {
         voiceId: voiceIdToUse,
       })
 
+      console.log('[TTS] synthesize result:', { hasErrors: !!result.errors, hasData: !!result.data, dataLength: result.data?.length })
+
       if (result.errors || !result.data) {
-        console.error('TTS error:', result.errors)
+        console.error('[TTS] Synthesis error:', result.errors)
         return null
       }
 
       return result.data
     } catch (error) {
-      console.error('TTS synthesis error:', error)
+      console.error('[TTS] Synthesis exception:', error)
       return null
     } finally {
       setIsSynthesizing(false)
@@ -91,22 +94,35 @@ export default function StoryPage() {
   // Play a single audio URL and return a promise that resolves when done
   const playAudioUrl = useCallback((url: string): Promise<void> => {
     return new Promise((resolve, reject) => {
+      console.log('[TTS] playAudioUrl called, URL length:', url?.length, 'URL preview:', url?.substring(0, 100))
+
       const audio = new Audio(url)
       audioRef.current = audio
 
-      audio.onplay = () => setIsSpeaking(true)
+      audio.onloadedmetadata = () => {
+        console.log('[TTS] Audio metadata loaded, duration:', audio.duration, 'seconds')
+      }
+      audio.onplay = () => {
+        console.log('[TTS] Audio onplay fired')
+        setIsSpeaking(true)
+      }
       audio.onended = () => {
+        console.log('[TTS] Audio onended fired, played duration:', audio.currentTime)
         setIsSpeaking(false)
         audioRef.current = null
         resolve()
       }
-      audio.onerror = () => {
+      audio.onerror = (e) => {
+        console.error('[TTS] Audio onerror:', e, audio.error)
         setIsSpeaking(false)
         audioRef.current = null
         reject(new Error('Audio playback failed'))
       }
 
-      audio.play().catch((err) => {
+      audio.play().then(() => {
+        console.log('[TTS] audio.play() promise resolved')
+      }).catch((err) => {
+        console.error('[TTS] audio.play() rejected:', err)
         audioRef.current = null
         reject(err)
       })
