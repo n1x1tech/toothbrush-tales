@@ -61,9 +61,22 @@ export default function StoryPage() {
   // Polly TTS state
   const [isSpeaking, setIsSpeaking] = useState(false)
   const [isSynthesizing, setIsSynthesizing] = useState(false)
+  // Use a persistent audio element to maintain user gesture context
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const audioQueueRef = useRef<{ text: string; voiceId: string }[]>([])
   const isProcessingQueueRef = useRef(false)
+
+  // Create persistent audio element on mount
+  useEffect(() => {
+    const audio = new Audio()
+    audio.preload = 'auto'
+    audioRef.current = audio
+    console.log('[TTS] Persistent audio element created')
+    return () => {
+      audio.pause()
+      audioRef.current = null
+    }
+  }, [])
 
   // Synthesize text to audio URL
   const synthesize = useCallback(async (text: string, voiceIdToUse: string): Promise<string | null> => {
@@ -94,11 +107,22 @@ export default function StoryPage() {
   // Play a single audio URL and return a promise that resolves when done
   const playAudioUrl = useCallback((url: string): Promise<void> => {
     return new Promise((resolve, reject) => {
-      console.log('[TTS] playAudioUrl called, URL length:', url?.length, 'URL preview:', url?.substring(0, 100))
+      console.log('[TTS] playAudioUrl called, URL length:', url?.length)
 
-      const audio = new Audio(url)
-      audioRef.current = audio
+      const audio = audioRef.current
+      if (!audio) {
+        console.error('[TTS] No audio element available')
+        reject(new Error('No audio element'))
+        return
+      }
 
+      // Clear previous handlers
+      audio.onloadedmetadata = null
+      audio.onplay = null
+      audio.onended = null
+      audio.onerror = null
+
+      // Set up new handlers
       audio.onloadedmetadata = () => {
         console.log('[TTS] Audio metadata loaded, duration:', audio.duration, 'seconds')
       }
@@ -109,21 +133,21 @@ export default function StoryPage() {
       audio.onended = () => {
         console.log('[TTS] Audio onended fired, played duration:', audio.currentTime)
         setIsSpeaking(false)
-        audioRef.current = null
         resolve()
       }
       audio.onerror = (e) => {
         console.error('[TTS] Audio onerror:', e, audio.error)
         setIsSpeaking(false)
-        audioRef.current = null
         reject(new Error('Audio playback failed'))
       }
 
+      // Set source and play
+      audio.src = url
+      audio.load()
       audio.play().then(() => {
         console.log('[TTS] audio.play() promise resolved')
       }).catch((err) => {
         console.error('[TTS] audio.play() rejected:', err)
-        audioRef.current = null
         reject(err)
       })
     })
@@ -188,11 +212,10 @@ export default function StoryPage() {
     audioQueueRef.current = []
     isProcessingQueueRef.current = false
 
-    // Stop current audio
+    // Stop current audio (but keep the element for reuse)
     if (audioRef.current) {
       audioRef.current.pause()
       audioRef.current.currentTime = 0
-      audioRef.current = null
     }
     setIsSpeaking(false)
   }, [])
@@ -267,10 +290,16 @@ export default function StoryPage() {
     }
   }, [phase, autoPlay, playbackMode, queueSpeech, story.conclusion, voiceId])
 
-  // Cleanup on unmount
+  // Cleanup on unmount - just stop playback, audio element cleanup handled separately
   useEffect(() => {
-    return () => stop()
-  }, [stop])
+    return () => {
+      audioQueueRef.current = []
+      isProcessingQueueRef.current = false
+      if (audioRef.current) {
+        audioRef.current.pause()
+      }
+    }
+  }, [])
 
   const handleSegmentChange = (segment: number) => {
     if (phase === 'brushing') {
@@ -315,22 +344,23 @@ export default function StoryPage() {
     // Move to intro phase IMMEDIATELY (synchronously)
     setPhase('intro')
 
-    // Unlock audio on iOS by playing a tiny silent sound from user gesture
-    // Do this without awaiting to prevent blocking
-    if (!audioUnlocked.current) {
+    // Unlock audio by playing a tiny silent sound on the PERSISTENT audio element
+    // This associates the user gesture with our audio element
+    if (!audioUnlocked.current && audioRef.current) {
       try {
-        const silentAudio = new Audio('data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=')
-        silentAudio.play()
+        const audio = audioRef.current
+        audio.src = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA='
+        audio.play()
           .then(() => {
-            silentAudio.pause()
+            console.log('[TTS] Audio element unlocked successfully')
             audioUnlocked.current = true
           })
-          .catch(() => {
-            // Audio unlock failed, but continue anyway
+          .catch((e) => {
+            console.warn('[TTS] Audio unlock failed:', e)
             audioUnlocked.current = true
           })
       } catch (e) {
-        // Ignore errors, continue with the story
+        console.warn('[TTS] Audio unlock exception:', e)
         audioUnlocked.current = true
       }
     }
