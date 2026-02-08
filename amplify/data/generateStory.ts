@@ -8,47 +8,145 @@ type GenerateStoryArgs = {
   theme: string;
 };
 
+// Dynamic fallback story templates that actually use the theme
+const STORY_TEMPLATES = [
+  {
+    intro: (name: string, theme: string) =>
+      `Hold onto your toothbrush because ${name} is about to have an incredible adventure! This is the story of ${name} who is ${theme}. Ready? Let's go!`,
+    segments: (name: string, theme: string) => [
+      `${name} couldn't believe it - today was finally the day to ${theme}! With a toothbrush in hand and a sparkly smile, ${name} was ready for anything. WHOOOOSH! A magical wind swept through, and suddenly everything around ${name} started to shimmer and glow. "This is going to be amazing!" ${name} cheered, bouncing with excitement.`,
+      `But wait - there was a problem! To truly ${theme}, ${name} needed to solve a tricky puzzle first. CRACK! A friendly talking squirrel appeared. "I can help," it squeaked, "but only if your teeth are super sparkly!" ${name} grinned wide, showing off those clean chompers. "Let's do this!" they shouted together.`,
+      `${name} and the squirrel zoomed through magical clouds, past rainbow waterfalls, and over mountains made of marshmallows - all while continuing to ${theme}! SPARKLE SPARKLE! Everything was going perfectly until - oh no! - a silly obstacle appeared. But ${name} wasn't worried. With a bright smile and quick thinking, the problem was solved in a flash!`,
+      `"You did it!" everyone cheered as ${name} finished the adventure of ${theme}. HOORAY! Confetti rained down, and ${name}'s teeth sparkled brighter than ever. The squirrel did a happy dance. "That was the best adventure ever," ${name} laughed. And it all started with a great brushing session!`
+    ],
+    conclusion: (name: string, theme: string) =>
+      `What an adventure! ${name} conquered ${theme} with flying colors! Your teeth are sparkling like stars - you're officially an adventure champion!`
+  },
+  {
+    intro: (name: string, theme: string) =>
+      `Get ready for an epic tale! ${name} is about to discover what happens when ${theme} becomes the adventure of a lifetime! Grab your toothbrush and let's go!`,
+    segments: (name: string, theme: string) => [
+      `${name} woke up with a feeling that today would be special. And ${name} was right! The moment ${name} started thinking about ${theme}, something magical happened. FLASH! A golden ticket appeared out of thin air. "Your adventure awaits," it read. ${name} pumped a fist in the air. "Yes! Let's go!"`,
+      `Following the golden ticket's map, ${name} discovered a secret garden where everything was connected to ${theme}. But a grumpy garden gnome blocked the path. "Only those with the brightest smiles may enter!" he declared. PING! ${name}'s teeth twinkled in the sunlight. The gnome's jaw dropped. "Wow, those are some impressive teeth!"`,
+      `Inside the garden, ${name} had to complete three challenges - all related to ${theme}. SWOOSH! ZOOM! SPLASH! Each one was trickier than the last, but ${name} never gave up. With every challenge conquered, ${name}'s confidence grew stronger. "I can do anything!" ${name} declared, striking a superhero pose.`,
+      `The final challenge was the biggest yet, but ${name} was ready. Using everything learned during the ${theme} adventure, ${name} solved it brilliantly! KABOOM! Fireworks exploded in celebration. "You're a true hero!" the gnome cheered, no longer grumpy at all. ${name} took a bow, grinning from ear to ear.`
+    ],
+    conclusion: (name: string, theme: string) =>
+      `Incredible! ${name} mastered the ${theme} challenge like a true champion! Those sparkling teeth helped save the day. You're amazing!`
+  },
+  {
+    intro: (name: string, theme: string) =>
+      `Buckle up for adventure! When ${name} decided to ${theme}, nobody expected what would happen next! This is going to be wild!`,
+    segments: (name: string, theme: string) => [
+      `${name} had always dreamed about ${theme}, and today that dream was coming true! VROOM! A rocket-powered skateboard appeared at ${name}'s feet. "Cool!" ${name} exclaimed, hopping on. The skateboard zoomed forward, taking ${name} on the first leg of this epic ${theme} journey. Wind whooshed past as ${name} laughed with joy.`,
+      `Suddenly, the skateboard stopped at a bubbling brook. A wise old owl perched on a branch nearby. "To continue your journey of ${theme}, you must answer my riddle," the owl hooted. HOOT HOOT! ${name} thought hard, teeth gleaming in concentration. "I've got it!" ${name} shouted, and the owl nodded approvingly.`,
+      `With the riddle solved, ${name} soared through candy-colored skies, getting closer and closer to completing ${theme}. WHOOOOSH! But then came the twistiest twist - a maze of mirrors! ${name} could see a hundred reflections, all smiling back. "My sparkly teeth will light the way!" And they did! SHIMMER SHIMMER!`,
+      `${name} burst through the final mirror and landed in a celebration parade! Everyone was cheering because ${name} had done it - ${theme} was complete! HOORAY! Balloons floated everywhere, and a marching band played a victory song. ${name} waved to the crowd, feeling like the happiest kid in the universe.`
+    ],
+    conclusion: (name: string, theme: string) =>
+      `AMAZING! ${name} finished the ${theme} adventure in spectacular style! Those super-clean teeth were the secret weapon all along. You're a superstar!`
+  }
+];
+
+function createDynamicFallbackStory(characterName: string, theme: string): Schema['Story']['type'] {
+  // Pick a random template for variety
+  const template = STORY_TEMPLATES[Math.floor(Math.random() * STORY_TEMPLATES.length)];
+
+  return {
+    id: crypto.randomUUID(),
+    characterName,
+    theme,
+    intro: template.intro(characterName, theme),
+    segments: template.segments(characterName, theme),
+    brushingPrompts: [
+      "Now brush your bottom teeth nice and clean!",
+      "Great job! Now brush your top teeth!",
+      "You're doing amazing! Brush the left side!",
+      "Almost done! Brush the right side!"
+    ],
+    conclusion: template.conclusion(characterName, theme),
+    audioUrl: null,
+    isFavorite: false,
+    playbackCount: 0,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+// Helper function to call Bedrock with retry logic
+async function invokeBedrockWithRetry(
+  command: InvokeModelCommand,
+  maxRetries: number = 2
+): Promise<{ content: Array<{ text: string }> }> {
+  let lastError: Error | null = null;
+
+  for (let attempt = 1; attempt <= maxRetries + 1; attempt++) {
+    try {
+      console.log(`[Story] Bedrock attempt ${attempt}/${maxRetries + 1}`);
+      const response = await client.send(command);
+      const responseBody = JSON.parse(new TextDecoder().decode(response.body));
+      return responseBody;
+    } catch (error) {
+      lastError = error as Error;
+      console.error(`[Story] Bedrock attempt ${attempt} failed:`, error);
+
+      // Don't retry on the last attempt
+      if (attempt <= maxRetries) {
+        // Exponential backoff: 1s, 2s, 4s...
+        const delay = Math.pow(2, attempt - 1) * 1000;
+        console.log(`[Story] Retrying in ${delay}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
+  }
+
+  throw lastError || new Error('All Bedrock retry attempts failed');
+}
+
 export const handler = async (event: { arguments: GenerateStoryArgs }): Promise<Schema['Story']['type']> => {
   const { characterName, theme } = event.arguments;
 
-  const systemPrompt = `You are an award-winning children's storyteller creating engaging 2-minute bedtime-style stories for 4-6 year olds. Your stories are designed to be read aloud during toothbrushing time.
+  const systemPrompt = `You are an award-winning children's storyteller creating engaging 2-minute adventure stories for 6-10 year olds. Your stories are designed to be read aloud during toothbrushing time.
 
 CRITICAL STORY REQUIREMENTS:
 1. Create ONE coherent story with a clear narrative arc (beginning → problem/adventure → resolution → celebration)
-2. The SAME characters and setting must continue throughout ALL segments
-3. Each segment must END with a mini-cliffhanger or transition that connects to the next segment
-4. Use the character's name frequently (at least 2-3 times per segment)
-5. Total story should take exactly 2 minutes when read at a child-friendly pace
+2. The ENTIRE story must be driven by the specific theme/scenario provided - it's not just background, it IS the plot
+3. The SAME characters, setting, and adventure must continue throughout ALL segments
+4. Each segment must END with a mini-cliffhanger or transition that connects to the next segment
+5. Use the character's name frequently (at least 2-3 times per segment)
+6. Total story should take exactly 2 minutes when read at a child-friendly pace
 
 WRITING STYLE:
-- Use simple, vivid vocabulary a 4-year-old understands
-- Include 2-3 sound effects per segment (WHOOOOSH! SPLISH SPLASH! BOING! ZOOM! POP! SPARKLE!)
-- Add silly moments, funny sounds, and unexpected surprises
-- Use short sentences mixed with slightly longer ones
-- Include dialogue with simple words
+- Write for 6-10 year olds: use engaging vocabulary, some mild suspense, and clever humor
+- Include 2-3 sound effects per segment (WHOOOOSH! SPLISH SPLASH! CRASH! ZOOM! POP! SPARKLE!)
+- Add humor, unexpected twists, and exciting moments appropriate for elementary school kids
+- Use varied sentence structure - mix short punchy sentences with longer descriptive ones
+- Include dialogue that sounds natural for the characters
 - Reference teeth/brushing naturally 1-2 times per segment (sparkly teeth, bright smile, clean and shiny)
-- Make it feel magical and adventurous
+- Make it feel like a real adventure with stakes and challenges
 
 STORY STRUCTURE:
-- Intro (8-10 seconds): Exciting hook that introduces character and adventure
-- Segment 1 (30 seconds, ~70 words): Set the scene, introduce the adventure's beginning
-- Segment 2 (30 seconds, ~70 words): The adventure continues, meet a friend or face a challenge
-- Segment 3 (30 seconds, ~70 words): Climax - the most exciting part!
-- Segment 4 (30 seconds, ~70 words): Resolution - how it all works out wonderfully
+- Intro (8-10 seconds): Exciting hook that introduces character and the specific adventure theme
+- Segment 1 (30 seconds, ~70 words): Set the scene directly in the theme's world/scenario
+- Segment 2 (30 seconds, ~70 words): The theme-specific adventure deepens, introduce a challenge related to the theme
+- Segment 3 (30 seconds, ~70 words): Climax - the most exciting moment tied directly to the theme
+- Segment 4 (30 seconds, ~70 words): Resolution - how the theme-specific adventure concludes
 - Conclusion (10 seconds): Celebrate success, connect to clean teeth achievement`;
 
   const userPrompt = `Create a toothbrushing adventure story about "${characterName}" who is ${theme}.
 
-IMPORTANT: Write a SINGLE CONTINUOUS STORY where each segment flows into the next. The story should feel like one complete adventure, not four separate mini-stories.
+THE THEME "${theme}" IS THE PLOT: This isn't just a detail - the ENTIRE story must be about ${characterName} experiencing this specific scenario. Every segment should advance this particular adventure, not a generic one.
+
+IMPORTANT: Write a SINGLE CONTINUOUS STORY where each segment flows into the next. The story should feel like one complete adventure about "${theme}", not four separate mini-stories or a generic adventure.
 
 Respond with ONLY valid JSON (no other text, no markdown code blocks):
 {
-  "intro": "An exciting 1-2 sentence hook introducing the adventure",
+  "intro": "An exciting 1-2 sentence hook about ${characterName} starting their ${theme} adventure",
   "segments": [
-    "First story paragraph (60-80 words) - ONLY story text, no labels or word counts",
-    "Second story paragraph (60-80 words) - continues the same adventure",
-    "Third story paragraph (60-80 words) - the exciting climax",
-    "Fourth story paragraph (60-80 words) - happy resolution"
+    "First paragraph (60-80 words) - ${characterName} begins the ${theme} adventure",
+    "Second paragraph (60-80 words) - the ${theme} adventure continues with a challenge",
+    "Third paragraph (60-80 words) - the exciting climax of the ${theme} adventure",
+    "Fourth paragraph (60-80 words) - ${characterName} succeeds in the ${theme} adventure"
   ],
   "brushingPrompts": [
     "Now brush your bottom teeth nice and clean!",
@@ -56,19 +154,20 @@ Respond with ONLY valid JSON (no other text, no markdown code blocks):
     "You're doing amazing! Brush the left side!",
     "Almost done! Brush the right side!"
   ],
-  "conclusion": "A celebratory ending (1-2 sentences)"
+  "conclusion": "A celebratory ending connecting the ${theme} success to sparkling teeth (1-2 sentences)"
 }
 
 CRITICAL RULES:
+- EVERY segment must directly involve the "${theme}" scenario - this is the heart of the story
 - Each segment must contain ONLY the story text - NO labels like "Segment 1", NO word counts, NO formatting instructions
 - Each segment MUST be 60-80 words of pure story
-- Story must be COHERENT - same characters, same adventure throughout all 4 segments
-- Include fun sound effects in EVERY segment (WHOOSH! SPLASH! ZOOM! POP! SPARKLE!)
+- Story must be COHERENT - same characters, same "${theme}" adventure throughout all 4 segments
+- Include fun sound effects in EVERY segment (WHOOSH! SPLASH! ZOOM! CRASH! SPARKLE!)
 - Mention ${characterName} by name 2-3 times per segment
-- Keep it silly, fun, and magical for 4-year-olds
-- NO scary content - only happy, exciting adventures
+- Write for 6-10 year olds: clever, exciting, with some suspense and humor
+- NO truly scary content, but mild suspense and challenges are good
 - The intro should be exciting and mention putting the toothbrush in their mouth
-- The conclusion should celebrate both the story ending AND their clean sparkly teeth`;
+- The conclusion should celebrate both the ${theme} adventure ending AND their clean sparkly teeth`;
 
   const payload = {
     anthropic_version: 'bedrock-2023-05-31',
@@ -80,8 +179,10 @@ CRITICAL RULES:
         content: userPrompt,
       },
     ],
-    temperature: 0.85,
+    temperature: 0.9, // Higher temperature for more creative, varied stories
   };
+
+  console.log(`[Story] Generating story for character="${characterName}", theme="${theme}"`);
 
   try {
     const command = new InvokeModelCommand({
@@ -91,11 +192,12 @@ CRITICAL RULES:
       body: JSON.stringify(payload),
     });
 
-    const response = await client.send(command);
-    const responseBody = JSON.parse(new TextDecoder().decode(response.body));
+    // Use retry logic for resilient Bedrock calls
+    const responseBody = await invokeBedrockWithRetry(command, 2);
 
     // Extract the text content from Claude's response
     const textContent = responseBody.content[0].text;
+    console.log(`[Story] Bedrock response received, length: ${textContent.length}`);
 
     // Parse the JSON from the response (handle potential markdown code blocks)
     let jsonString = textContent.trim();
@@ -110,6 +212,7 @@ CRITICAL RULES:
     }
 
     const storyData = JSON.parse(jsonString.trim());
+    console.log(`[Story] Successfully parsed story JSON`);
 
     // Return the story in the expected format
     return {
@@ -127,32 +230,10 @@ CRITICAL RULES:
       updatedAt: new Date().toISOString(),
     };
   } catch (error) {
-    console.error('Error generating story:', error);
+    console.error('[Story] Error generating story from Bedrock:', error);
+    console.log(`[Story] Using dynamic fallback for character="${characterName}", theme="${theme}"`);
 
-    // Return a fallback story if Bedrock fails
-    return {
-      id: crypto.randomUUID(),
-      characterName,
-      theme,
-      intro: `Get ready for an amazing adventure! This is the story of ${characterName} who is ${theme}. Put your toothbrush in your mouth, and let's go!`,
-      segments: [
-        `Once upon a time, ${characterName} discovered something magical in the bathroom - a toothbrush that could fly! "WHOOOOSH!" it said, zooming around ${characterName}'s head. "Want to go on an adventure?" it asked with a sparkly grin. ${characterName} nodded excitedly. "Hold on tight!" said the toothbrush, and suddenly they were lifting off the ground, flying right out the window!`,
-        `${characterName} and the flying toothbrush soared over a beautiful rainbow valley! "WHEEEEE!" shouted ${characterName}. Down below, they spotted a friendly cloud named Fluffy. "Hello ${characterName}!" Fluffy giggled. "Your teeth look so sparkly and clean!" BOING BOING! ${characterName} bounced on Fluffy's soft cloudiness. "Let's find the Crystal Castle!" said the toothbrush, pointing ahead.`,
-        `There it was - the magnificent Crystal Castle made entirely of sparkling teeth! "WOW!" gasped ${characterName}. The castle gates opened with a magical DING DONG! Inside, the Tooth Fairy Queen waved her wand. "Welcome, ${characterName}!" she cheered. "You've found my secret castle!" SPARKLE SPARKLE went her crown. She handed ${characterName} a special golden star. "This is for being such a great brusher!"`,
-        `${characterName} flew back home with the golden star glowing brightly. "What an adventure!" ${characterName} laughed. The magic toothbrush did a happy dance - WIGGLE WIGGLE SPIN! "You know why we had so much fun?" asked the toothbrush. "Because you brush your teeth so well!" ${characterName}'s smile was the brightest, sparkliest smile in the whole world! HOORAY!`
-      ],
-      brushingPrompts: [
-        "Now brush your bottom teeth nice and clean!",
-        "Great job! Now brush your top teeth!",
-        "You're doing amazing! Brush the left side!",
-        "Almost done! Brush the right side!"
-      ],
-      conclusion: `HOORAY! ${characterName} did it, and so did you! Your teeth are sparkling clean and super shiny! You're a brushing superstar! Give yourself a big high five!`,
-      audioUrl: null,
-      isFavorite: false,
-      playbackCount: 0,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
+    // Return a dynamic fallback story that actually uses the theme
+    return createDynamicFallbackStory(characterName, theme);
   }
 };

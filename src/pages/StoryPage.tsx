@@ -61,6 +61,7 @@ export default function StoryPage() {
   // Polly TTS state
   const [isSpeaking, setIsSpeaking] = useState(false)
   const [isSynthesizing, setIsSynthesizing] = useState(false)
+  const [ttsError, setTtsError] = useState<string | null>(null)
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const audioQueueRef = useRef<{ text: string; voiceId: string }[]>([])
   const isProcessingQueueRef = useRef(false)
@@ -86,6 +87,7 @@ export default function StoryPage() {
   const synthesize = useCallback(async (text: string, voiceIdToUse: string): Promise<string | null> => {
     console.log('[TTS] synthesize called for voice:', voiceIdToUse)
     setIsSynthesizing(true)
+    setTtsError(null) // Clear previous errors
     try {
       const result = await client.queries.synthesizeSpeech({
         text,
@@ -96,12 +98,15 @@ export default function StoryPage() {
 
       if (result.errors || !result.data) {
         console.error('[TTS] Synthesis error:', result.errors)
+        const errorMsg = result.errors?.[0]?.message || 'Voice narration unavailable'
+        setTtsError(errorMsg)
         return null
       }
 
       return result.data
     } catch (error) {
       console.error('[TTS] Synthesis exception:', error)
+      setTtsError('Voice narration unavailable - please check your connection')
       return null
     } finally {
       setIsSynthesizing(false)
@@ -437,6 +442,12 @@ export default function StoryPage() {
 
   return (
     <div className={styles.container}>
+      {ttsError && (
+        <div className={styles.ttsError}>
+          <span>Audio unavailable</span>
+          <button onClick={() => setTtsError(null)} className={styles.dismissError}>×</button>
+        </div>
+      )}
       <PlaybackControls
         isPlaying={isSpeaking}
         isPaused={false}

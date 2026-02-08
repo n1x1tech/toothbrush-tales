@@ -35,7 +35,7 @@ export const useAppStore = create<AppState>()(
     (set, get) => ({
       // Default settings
       playbackMode: 'both',
-      voiceId: 'Olivia', // Australian voice by default
+      voiceId: 'Joanna', // Natural American voice - neural engine, most reliable
       autoPlay: true,
 
       // Current story

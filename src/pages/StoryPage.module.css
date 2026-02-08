@@ -134,3 +134,30 @@
     box-shadow: 0 8px 30px rgba(255, 107, 107, 0.6);
   }
 }
+
+/* TTS Error Banner */
+.ttsError {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #FFF3CD;
+  border: 1px solid #FFE69C;
+  border-radius: var(--border-radius);
+  padding: 0.75rem 1rem;
+  color: #856404;
+  font-size: 0.9rem;
+}
+
+.dismissError {
+  background: transparent;
+  border: none;
+  color: #856404;
+  font-size: 1.2rem;
+  cursor: pointer;
+  padding: 0 0.25rem;
+  line-height: 1;
+}
+
+.dismissError:hover {
+  color: #533f03;
+}

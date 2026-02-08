@@ -13,19 +13,20 @@ export interface Story {
   conclusion: string
   audioUrl?: string | null
   isFavorite: boolean
+  isFallback?: boolean // Flag to indicate this is a fallback story
 }
 
-// Create a fallback story for when API is unavailable
+// Create a theme-aware fallback story for when API is unavailable
 const createFallbackStory = (characterName: string, theme: string): Story => ({
   id: crypto.randomUUID(),
   characterName,
   theme,
-  intro: `This story is about ${characterName} ${theme}. Get ready to brush, here we go!`,
+  intro: `Get ready for adventure! ${characterName} is about to ${theme}! Grab your toothbrush and let's make some magic happen!`,
   segments: [
-    `Once upon a time, ${characterName} woke up feeling super excited! Today was the day for a big adventure. WHOOOOSH! ${characterName} jumped out of bed and did a silly dance, wiggling and giggling all around the room!`,
-    `${characterName} found a magical toothbrush that could talk! "Hello friend!" said the toothbrush with a sparkly grin. "Let's make your teeth sparkle like stars in the night sky!" And they zoomed off together. ZOOM ZOOM!`,
-    `Along the way, ${characterName} met a friendly dragon who absolutely LOVED clean teeth! The dragon showed them how to brush in circles. "Round and round, up and down!" they sang together happily. SPLISH SPLASH went the bubbles!`,
-    `Finally, ${characterName} reached the end of their amazing adventure with the shiniest, cleanest teeth in all the land! The magical toothbrush did a happy wiggle dance. "You did it!" cheered everyone. HOORAY!`
+    `${characterName} couldn't believe today was finally the day to ${theme}! WHOOOOSH! With a sparkly toothbrush in hand, ${characterName} was ready for anything. The adventure was about to begin, and ${characterName} could feel the excitement bubbling up inside!`,
+    `As ${characterName} continued the ${theme} journey, a friendly helper appeared! "I'll help you!" it said with a grin. ZOOM ZOOM! Together they faced the first challenge. ${characterName}'s bright smile lit up the way. "We can do this!" ${characterName} cheered.`,
+    `The ${theme} adventure was getting more exciting by the minute! ${characterName} had to be brave and clever. SPLISH SPLASH! With quick thinking and those super-sparkly teeth shining bright, ${characterName} found the perfect solution. "Almost there!" ${characterName} shouted happily.`,
+    `${characterName} did it! The ${theme} adventure was a complete success! HOORAY! Everyone cheered and celebrated. ${characterName}'s teeth sparkled brighter than ever before. "That was the best adventure ever!" ${characterName} laughed, doing a happy victory dance.`
   ],
   brushingPrompts: [
     "Now brush your bottom teeth!",
@@ -33,9 +34,10 @@ const createFallbackStory = (characterName: string, theme: string): Story => ({
     "Brush the teeth on your left side!",
     "Brush the teeth on your right side!"
   ],
-  conclusion: "Hooray! Your teeth are super clean and sparkly! Great job brushing! You're a toothbrushing champion! Give yourself a big high five!",
+  conclusion: `What an amazing adventure! ${characterName} conquered the ${theme} challenge! Your teeth are super clean and sparkly! You're a champion!`,
   audioUrl: null,
   isFavorite: false,
+  isFallback: true, // Mark as fallback so UI can indicate this
 })
 
 export function useStoryGeneration() {
@@ -43,6 +45,7 @@ export function useStoryGeneration() {
   const [error, setError] = useState<Error | null>(null)
 
   const generateStory = useCallback(async (characterName: string, theme: string): Promise<Story> => {
+    console.log(`[StoryGen] Generating story for character="${characterName}", theme="${theme}"`)
     setIsGenerating(true)
     setError(null)
 
@@ -55,11 +58,15 @@ export function useStoryGeneration() {
         theme,
       })
 
+      console.log(`[StoryGen] API response:`, { hasErrors: !!result.errors, hasData: !!result.data })
+
       if (result.errors || !result.data) {
+        console.error(`[StoryGen] API errors:`, result.errors)
         throw new Error(result.errors?.[0]?.message || 'Failed to generate story')
       }
 
       const storyData = result.data
+      console.log(`[StoryGen] Story received: intro="${storyData.intro?.substring(0, 50)}..."`)
 
       return {
         id: storyData.id || crypto.randomUUID(),
@@ -71,9 +78,10 @@ export function useStoryGeneration() {
         conclusion: storyData.conclusion,
         audioUrl: storyData.audioUrl,
         isFavorite: storyData.isFavorite ?? false,
+        isFallback: false,
       }
     } catch (err) {
-      console.warn('API unavailable, using fallback story:', err)
+      console.warn('[StoryGen] API unavailable, using fallback story:', err)
       // Return a fallback story if API fails
       return createFallbackStory(characterName, theme)
     } finally {

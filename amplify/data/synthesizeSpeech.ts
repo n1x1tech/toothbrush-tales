@@ -3,9 +3,11 @@ import { PollyClient, SynthesizeSpeechCommand, VoiceId, Engine } from '@aws-sdk/
 const pollyClient = new PollyClient({ region: process.env.AWS_REGION || 'us-east-1' });
 
 // Kid-friendly voices with correct engines for each voice
-const VOICES: Record<string, { id: VoiceId; engine: Engine }> = {
-  // Australian English - Olivia requires generative engine
-  Olivia: { id: VoiceId.Olivia, engine: Engine.GENERATIVE },
+// Neural voices are more widely available across regions than Generative voices
+const VOICES: Record<string, { id: VoiceId; engine: Engine; fallbackEngine?: Engine }> = {
+  // Australian English - Olivia uses generative but has neural fallback
+  // Generative has limited regional availability, so try neural first in some regions
+  Olivia: { id: VoiceId.Olivia, engine: Engine.GENERATIVE, fallbackEngine: Engine.NEURAL },
 
   // British English
   Amy: { id: VoiceId.Amy, engine: Engine.NEURAL },
@@ -18,7 +20,7 @@ const VOICES: Record<string, { id: VoiceId; engine: Engine }> = {
   Matthew: { id: VoiceId.Matthew, engine: Engine.NEURAL },
   Ivy: { id: VoiceId.Ivy, engine: Engine.NEURAL },
   Kendra: { id: VoiceId.Kendra, engine: Engine.NEURAL },
-  Ruth: { id: VoiceId.Ruth, engine: Engine.GENERATIVE },
+  Ruth: { id: VoiceId.Ruth, engine: Engine.GENERATIVE, fallbackEngine: Engine.NEURAL },
   Kevin: { id: VoiceId.Kevin, engine: Engine.NEURAL },
   Salli: { id: VoiceId.Salli, engine: Engine.NEURAL },
   Joey: { id: VoiceId.Joey, engine: Engine.NEURAL },
@@ -32,54 +34,86 @@ type SynthesizeSpeechArgs = {
   voiceId?: string;
 };
 
-export const handler = async (
-  event: { arguments: SynthesizeSpeechArgs }
-): Promise<string> => {
-  const { text, voiceId = 'Joanna' } = event.arguments;
+// Helper function to synthesize speech with a specific engine
+async function synthesizeWithEngine(
+  text: string,
+  voiceIdEnum: VoiceId,
+  engine: Engine
+): Promise<Buffer> {
+  const isGenerative = engine === Engine.GENERATIVE;
 
-  // Get voice configuration or default to Joanna
-  const voice = VOICES[voiceId] || VOICES['Joanna'];
-
-  // Generative engine doesn't support SSML
-  const isGenerative = voice.engine === Engine.GENERATIVE;
-
-  // Neural voices only support rate and volume in prosody (NOT pitch)
+  // Neural voices support SSML with rate/volume prosody
   // Generative voices don't support SSML at all
   const speechText = isGenerative
     ? text
     : `<speak><prosody rate="slow">${text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</prosody></speak>`;
 
+  console.log(`[Polly] Synthesizing with voice=${voiceIdEnum}, engine=${engine}`);
+
+  const command = new SynthesizeSpeechCommand({
+    Text: speechText,
+    TextType: isGenerative ? 'text' : 'ssml',
+    OutputFormat: 'mp3',
+    VoiceId: voiceIdEnum,
+    Engine: engine,
+    SampleRate: '22050',
+  });
+
+  const response = await pollyClient.send(command);
+
+  if (!response.AudioStream) {
+    throw new Error('No audio stream returned from Polly');
+  }
+
+  // Use the SDK's built-in method to convert stream to byte array
+  // This is more reliable than manual iteration across different Node.js versions
+  const audioBytes = await response.AudioStream.transformToByteArray();
+  return Buffer.from(audioBytes);
+}
+
+export const handler = async (
+  event: { arguments: SynthesizeSpeechArgs }
+): Promise<string> => {
+  const { text, voiceId = 'Joanna' } = event.arguments;
+
+  console.log(`[Polly] Request received for voice: ${voiceId}, text length: ${text.length}`);
+
+  // Get voice configuration or default to Joanna (neural, widely available)
+  const voice = VOICES[voiceId] || VOICES['Joanna'];
+
   try {
-    const command = new SynthesizeSpeechCommand({
-      Text: speechText,
-      TextType: isGenerative ? 'text' : 'ssml',
-      OutputFormat: 'mp3',
-      VoiceId: voice.id,
-      Engine: voice.engine,
-      SampleRate: '22050',
-    });
+    let audioBuffer: Buffer;
 
-    const response = await pollyClient.send(command);
+    try {
+      // Try with primary engine first
+      audioBuffer = await synthesizeWithEngine(text, voice.id, voice.engine);
+    } catch (primaryError) {
+      console.error(`[Polly] Primary engine failed:`, primaryError);
 
-    if (!response.AudioStream) {
-      throw new Error('No audio stream returned from Polly');
+      // If there's a fallback engine and primary failed, try fallback
+      if (voice.fallbackEngine) {
+        console.log(`[Polly] Trying fallback engine: ${voice.fallbackEngine}`);
+        try {
+          audioBuffer = await synthesizeWithEngine(text, voice.id, voice.fallbackEngine);
+        } catch (fallbackError) {
+          console.error(`[Polly] Fallback engine also failed:`, fallbackError);
+          // If voice-specific fallback fails, try Joanna as ultimate fallback
+          console.log(`[Polly] Trying Joanna as ultimate fallback`);
+          audioBuffer = await synthesizeWithEngine(text, VoiceId.Joanna, Engine.NEURAL);
+        }
+      } else {
+        // No fallback engine, try Joanna as ultimate fallback
+        console.log(`[Polly] Trying Joanna as ultimate fallback`);
+        audioBuffer = await synthesizeWithEngine(text, VoiceId.Joanna, Engine.NEURAL);
+      }
     }
 
-    // Convert stream to buffer
-    const chunks: Uint8Array[] = [];
-    const reader = response.AudioStream as AsyncIterable<Uint8Array>;
-
-    for await (const chunk of reader) {
-      chunks.push(chunk);
-    }
-
-    const audioBuffer = Buffer.concat(chunks);
-
-    // Return as base64 data URL - no S3 needed!
+    // Return as base64 data URL
     const base64Audio = audioBuffer.toString('base64');
+    console.log(`[Polly] Success! Audio size: ${audioBuffer.length} bytes`);
     return `data:audio/mpeg;base64,${base64Audio}`;
   } catch (error) {
-    console.error('Error synthesizing speech:', error);
+    console.error('[Polly] All synthesis attempts failed:', error);
     throw new Error(`Failed to synthesize speech: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 };

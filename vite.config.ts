@@ -66,37 +66,29 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2}'],
-        // Cache stories in localStorage, but cache API responses and assets
+        // IMPORTANT: Do NOT cache AppSync GraphQL API calls!
+        // Story generation and TTS can take 10-60 seconds and must always be fresh.
+        // Caching these caused stories to repeat when Bedrock was slow.
         runtimeCaching: [
           {
-            // Cache Amplify/AWS API calls
-            urlPattern: /^https:\/\/.*\.amazonaws\.com\/.*/i,
+            // Cache static AWS resources (Cognito, S3 assets) but NOT AppSync
+            // Exclude appsync-api to prevent story/TTS caching issues
+            urlPattern: /^https:\/\/(?!.*appsync-api).*\.amazonaws\.com\/.*/i,
             handler: 'NetworkFirst',
             options: {
-              cacheName: 'aws-api-cache',
+              cacheName: 'aws-static-cache',
               expiration: {
-                maxEntries: 100,
-                maxAgeSeconds: 60 * 60 * 24 * 7, // 7 days
+                maxEntries: 50,
+                maxAgeSeconds: 60 * 60 * 24, // 1 day
               },
-              networkTimeoutSeconds: 10,
+              networkTimeoutSeconds: 30,
               cacheableResponse: {
                 statuses: [0, 200],
               },
             },
           },
-          {
-            // Cache Amplify AppSync GraphQL
-            urlPattern: /^https:\/\/.*\.appsync-api\..*\.amazonaws\.com\/.*/i,
-            handler: 'NetworkFirst',
-            options: {
-              cacheName: 'appsync-cache',
-              expiration: {
-                maxEntries: 50,
-                maxAgeSeconds: 60 * 60 * 24, // 1 day
-              },
-              networkTimeoutSeconds: 10,
-            },
-          },
+          // NOTE: AppSync GraphQL (story generation, TTS) is intentionally NOT cached.
+          // Each request must go to the network to get fresh AI-generated content.
           {
             // Cache Google Fonts
             urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
