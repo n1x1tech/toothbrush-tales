@@ -48,23 +48,35 @@ const STORY_TEMPLATES = [
   }
 ];
 
+// Format multiple names naturally for story text (e.g., "Arlo, Luna and Max")
+function formatNames(characterName: string): string {
+  const names = characterName
+    .split(/,\s*|\s+and\s+|\s+&\s+/)
+    .map(n => n.trim())
+    .filter(n => n.length > 0);
+  if (names.length <= 1) return characterName;
+  if (names.length === 2) return `${names[0]} and ${names[1]}`;
+  return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+}
+
 function createDynamicFallbackStory(characterName: string, theme: string): Schema['Story']['type'] {
   // Pick a random template for variety
   const template = STORY_TEMPLATES[Math.floor(Math.random() * STORY_TEMPLATES.length)];
+  const displayName = formatNames(characterName);
 
   return {
     id: crypto.randomUUID(),
     characterName,
     theme,
-    intro: template.intro(characterName, theme),
-    segments: template.segments(characterName, theme),
+    intro: template.intro(displayName, theme),
+    segments: template.segments(displayName, theme),
     brushingPrompts: [
       "Now brush your bottom teeth nice and clean!",
       "Great job! Now brush your top teeth!",
       "You're doing amazing! Brush the left side!",
       "Almost done! Brush the right side!"
     ],
-    conclusion: template.conclusion(characterName, theme),
+    conclusion: template.conclusion(displayName, theme),
     audioUrl: null,
     isFavorite: false,
     playbackCount: 0,
@@ -106,6 +118,16 @@ async function invokeBedrockWithRetry(
 export const handler = async (event: { arguments: GenerateStoryArgs }): Promise<Schema['Story']['type']> => {
   const { characterName, theme } = event.arguments;
 
+  // Detect if multiple names are provided
+  const nameList = characterName
+    .split(/,\s*|\s+and\s+|\s+&\s+/)
+    .map(n => n.trim())
+    .filter(n => n.length > 0);
+  const isMultipleCharacters = nameList.length > 1;
+  const characterGuidance = isMultipleCharacters
+    ? `MULTIPLE CHARACTERS: The story stars ${nameList.length} characters: ${nameList.join(', ')}. EVERY character must appear by name in EVERY segment. Give each character distinct actions and dialogue. They work as a team. Use each character's name at least once per segment.`
+    : `Use the character's name frequently (at least 2-3 times per segment).`;
+
   const systemPrompt = `You are an award-winning children's storyteller creating engaging 2-minute adventure stories for 6-10 year olds. Your stories are designed to be read aloud during toothbrushing time.
 
 CRITICAL STORY REQUIREMENTS:
@@ -113,7 +135,7 @@ CRITICAL STORY REQUIREMENTS:
 2. The ENTIRE story must be driven by the specific theme/scenario provided - it's not just background, it IS the plot
 3. The SAME characters, setting, and adventure must continue throughout ALL segments
 4. Each segment must END with a mini-cliffhanger or transition that connects to the next segment
-5. Use the character's name frequently (at least 2-3 times per segment)
+5. ${characterGuidance}
 6. Total story should take exactly 2 minutes when read at a child-friendly pace
 
 WRITING STYLE:
@@ -126,14 +148,21 @@ WRITING STYLE:
 - Make it feel like a real adventure with stakes and challenges
 
 STORY STRUCTURE:
-- Intro (8-10 seconds): Exciting hook that introduces character and the specific adventure theme
+- Intro (8-10 seconds): Exciting hook that introduces ${isMultipleCharacters ? 'all characters by name' : 'the character'} and the specific adventure theme
 - Segment 1 (30 seconds, ~70 words): Set the scene directly in the theme's world/scenario
 - Segment 2 (30 seconds, ~70 words): The theme-specific adventure deepens, introduce a challenge related to the theme
 - Segment 3 (30 seconds, ~70 words): Climax - the most exciting moment tied directly to the theme
 - Segment 4 (30 seconds, ~70 words): Resolution - how the theme-specific adventure concludes
 - Conclusion (10 seconds): Celebrate success, connect to clean teeth achievement`;
 
-  const userPrompt = `Create a toothbrushing adventure story about "${characterName}" who is ${theme}.
+  const characterDescription = isMultipleCharacters
+    ? `${nameList.join(', ')} who are`
+    : `"${characterName}" who is`;
+  const nameInstruction = isMultipleCharacters
+    ? `Mention EACH character (${nameList.join(', ')}) by name in every segment - give them each distinct actions`
+    : `Mention ${characterName} by name 2-3 times per segment`;
+
+  const userPrompt = `Create a toothbrushing adventure story about ${characterDescription} ${theme}.
 
 THE THEME "${theme}" IS THE PLOT: This isn't just a detail - the ENTIRE story must be about ${characterName} experiencing this specific scenario. Every segment should advance this particular adventure, not a generic one.
 
@@ -163,7 +192,7 @@ CRITICAL RULES:
 - Each segment MUST be 60-80 words of pure story
 - Story must be COHERENT - same characters, same "${theme}" adventure throughout all 4 segments
 - Include fun sound effects in EVERY segment (WHOOSH! SPLASH! ZOOM! CRASH! SPARKLE!)
-- Mention ${characterName} by name 2-3 times per segment
+- ${nameInstruction}
 - Write for 6-10 year olds: clever, exciting, with some suspense and humor
 - NO truly scary content, but mild suspense and challenges are good
 - The intro should be exciting and mention putting the toothbrush in their mouth

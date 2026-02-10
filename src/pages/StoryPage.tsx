@@ -11,7 +11,7 @@ import styles from './StoryPage.module.css'
 
 const client = generateClient<Schema>()
 
-// Fallback story if none provided
+// Fallback story if none provided (e.g., direct navigation to /story)
 const createFallbackStory = (): Story => ({
   id: crypto.randomUUID(),
   characterName: 'Alex',
@@ -32,6 +32,7 @@ const createFallbackStory = (): Story => ({
   conclusion: "Hooray! Your teeth are super clean and sparkly! Great job brushing! You're a toothbrushing champion!",
   audioUrl: null,
   isFavorite: false,
+  isFallback: true,
 })
 
 const INTRO_DURATION = 8000 // 8 seconds for intro
@@ -127,7 +128,9 @@ export default function StoryPage() {
 
       // Clear ALL previous handlers to prevent memory leaks and conflicts
       audio.oncanplaythrough = null
+      audio.oncanplay = null
       audio.onloadedmetadata = null
+      audio.onloadeddata = null
       audio.onplay = null
       audio.onended = null
       audio.onerror = null
@@ -140,24 +143,27 @@ export default function StoryPage() {
 
       let hasStartedPlaying = false
       let hasEnded = false
+      let playbackTimeout: ReturnType<typeof setTimeout> | null = null
 
       const cleanup = () => {
+        if (playbackTimeout) {
+          clearTimeout(playbackTimeout)
+          playbackTimeout = null
+        }
         audio.oncanplaythrough = null
+        audio.oncanplay = null
         audio.onloadedmetadata = null
+        audio.onloadeddata = null
         audio.onplay = null
         audio.onended = null
         audio.onerror = null
         audio.onabort = null
       }
 
-      audio.onloadedmetadata = () => {
-        console.log('[TTS] Audio metadata loaded, duration:', audio.duration, 'seconds')
-      }
-
-      audio.oncanplaythrough = () => {
+      const tryPlay = (source: string) => {
         if (hasStartedPlaying) return
         hasStartedPlaying = true
-        console.log('[TTS] canplaythrough fired, starting playback')
+        console.log(`[TTS] ${source} fired, starting playback`)
 
         audio.play().then(() => {
           console.log('[TTS] audio.play() promise resolved')
@@ -166,6 +172,22 @@ export default function StoryPage() {
           cleanup()
           reject(err)
         })
+      }
+
+      audio.onloadedmetadata = () => {
+        console.log('[TTS] Audio metadata loaded, duration:', audio.duration, 'seconds')
+      }
+
+      // Use canplay (fires earlier than canplaythrough) - more reliable for data URLs
+      audio.oncanplay = () => tryPlay('canplay')
+      audio.oncanplaythrough = () => tryPlay('canplaythrough')
+
+      // Fallback: if data URL is already loaded, loadeddata fires before canplay in some browsers
+      audio.onloadeddata = () => {
+        console.log('[TTS] loadeddata fired, readyState:', audio.readyState)
+        if (audio.readyState >= 3) {
+          tryPlay('loadeddata')
+        }
       }
 
       audio.onplay = () => {
@@ -190,9 +212,22 @@ export default function StoryPage() {
         reject(new Error('Audio playback failed'))
       }
 
-      // Set source - this triggers loading automatically
-      console.log('[TTS] Setting audio src')
+      // Set source and explicitly load - some browsers need load() for data URLs
+      console.log('[TTS] Setting audio src and calling load()')
       audio.src = url
+      audio.load()
+
+      // Safety timeout: if no event fires within 5 seconds, try to play anyway
+      playbackTimeout = setTimeout(() => {
+        if (!hasStartedPlaying && audio.readyState >= 2) {
+          console.warn('[TTS] No load event fired after 5s, forcing play (readyState:', audio.readyState, ')')
+          tryPlay('timeout-fallback')
+        } else if (!hasStartedPlaying) {
+          console.error('[TTS] Audio failed to load after 5s, readyState:', audio.readyState)
+          cleanup()
+          reject(new Error('Audio failed to load'))
+        }
+      }, 5000)
     })
   }, [])
 
@@ -399,20 +434,27 @@ export default function StoryPage() {
       hasSpokenIntro.current = true
       audioUnlocked.current = true
 
-      // CRITICAL: Start synthesis and playback directly from user gesture
-      // Do NOT use queueSpeech for the intro - play it directly to maintain gesture context
-      console.log('[TTS] Starting intro synthesis directly from user tap')
-
+      // Unlock audio context from user gesture by playing a tiny silent sound
+      // This ensures subsequent queue-driven playback works on iOS/mobile
       try {
-        const audioUrl = await synthesize(story.intro, voiceId)
-        if (audioUrl) {
-          console.log('[TTS] Intro synthesized, playing directly')
-          await playAudioUrl(audioUrl)
-          console.log('[TTS] Intro playback complete')
+        const audio = audioRef.current
+        if (audio) {
+          // Create a minimal silent audio to unlock the audio element
+          // This is a tiny valid MP3 frame (silence)
+          audio.src = 'data:audio/mp3;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4Ljc2LjEwMAAAAAAAAAAAAAAA//tQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWGluZwAAAA8AAAACAAABhgC7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7//////////////////////////////////////////////////////////////////8AAAAATGF2YzU4LjEzAAAAAAAAAAAAAAAAJAAAAAAAAAAAAYYoRwSHAAAAAAAAAAAAAAAAAAAA//tQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWGluZwAAAA8AAAACAAABhgC7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7//////////////////////////////////////////////////////////////////8AAAAATGF2YzU4LjEzAAAAAAAAAAAAAAAAJAAAAAAAAAAAAYYoRwSHAAAAAAAAAAAAAAAAAAAA'
+          await audio.play()
+          audio.pause()
+          audio.currentTime = 0
+          console.log('[TTS] Audio context unlocked from user gesture')
         }
-      } catch (error) {
-        console.error('[TTS] Intro playback error:', error)
+      } catch (e) {
+        console.warn('[TTS] Audio unlock failed (may still work):', e)
       }
+
+      // Queue intro through the queue system to prevent race conditions
+      // with segment playback that starts after INTRO_DURATION
+      console.log('[TTS] Queueing intro speech')
+      queueSpeech(story.intro, voiceId)
     }
   }
 
@@ -446,6 +488,11 @@ export default function StoryPage() {
         <div className={styles.ttsError}>
           <span>Audio unavailable</span>
           <button onClick={() => setTtsError(null)} className={styles.dismissError}>×</button>
+        </div>
+      )}
+      {story.isFallback && (
+        <div className={styles.fallbackNotice}>
+          <span>Using a built-in story (AI generation was unavailable). Try again later for a custom story!</span>
         </div>
       )}
       <PlaybackControls

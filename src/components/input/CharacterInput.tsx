@@ -24,7 +24,7 @@ export default function CharacterInput({ value, onChange }: CharacterInputProps)
         <input
           type="text"
           className={styles.input}
-          placeholder="Enter a name (like Arlo)"
+          placeholder="Enter names (e.g. Arlo, Luna and Max)"
           value={value}
           onChange={(e) => onChange(e.target.value)}
         />

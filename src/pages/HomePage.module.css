@@ -26,6 +26,16 @@
   gap: 1.5rem;
 }
 
+.errorBanner {
+  background: #fff3cd;
+  border: 1px solid #ffc107;
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  color: #856404;
+  font-size: 0.95rem;
+  text-align: center;
+}
+
 .generateButton {
   background: linear-gradient(135deg, var(--color-primary), #FF8E8E);
   color: white;

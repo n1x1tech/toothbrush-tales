@@ -9,16 +9,20 @@ export default function HomePage() {
   const navigate = useNavigate()
   const [characterName, setCharacterName] = useState('')
   const [theme, setTheme] = useState('')
+  const [generationError, setGenerationError] = useState<string | null>(null)
   const { generateStory, isGenerating } = useStoryGeneration()
 
   const handleGenerateStory = async () => {
     if (!characterName.trim() || !theme.trim()) return
+    setGenerationError(null)
 
     try {
       const story = await generateStory(characterName.trim(), theme.trim())
-      navigate('/story', { state: { story } })
-    } catch (error) {
-      console.error('Failed to generate story:', error)
+      // Navigate to story page, passing fallback warning if applicable
+      navigate('/story', { state: { story, wasFallback: story.isFallback } })
+    } catch (err) {
+      console.error('Failed to generate story:', err)
+      setGenerationError('Something went wrong. Please try again.')
     }
   }
 
@@ -43,6 +47,12 @@ export default function HomePage() {
           value={theme}
           onChange={setTheme}
         />
+
+        {generationError && (
+          <div className={styles.errorBanner}>
+            {generationError}
+          </div>
+        )}
 
         <button
           className={styles.generateButton}
