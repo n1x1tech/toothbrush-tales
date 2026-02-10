@@ -1,0 +1,81 @@
+.container {
+  background: var(--color-white);
+  border-radius: var(--border-radius);
+  padding: 1.5rem;
+  box-shadow: var(--shadow);
+}
+
+.timerDisplay {
+  text-align: center;
+  margin-bottom: 1rem;
+}
+
+.time {
+  font-size: 3rem;
+  font-weight: 800;
+  color: var(--color-primary);
+  display: block;
+}
+
+.segmentLabel {
+  font-size: 1.2rem;
+  color: var(--color-text-light);
+  font-weight: 600;
+}
+
+.progressContainer {
+  position: relative;
+  height: 12px;
+  background: #E0E0E0;
+  border-radius: 6px;
+  overflow: hidden;
+  margin-bottom: 1rem;
+}
+
+.progressBar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  background: linear-gradient(90deg, var(--color-secondary), var(--color-primary));
+  border-radius: 6px;
+  transition: width 0.3s ease;
+}
+
+.segmentMarkers {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  justify-content: space-between;
+  padding: 0 2px;
+}
+
+.segmentMarker {
+  width: 4px;
+  height: 100%;
+  background: rgba(255, 255, 255, 0.5);
+  border-radius: 2px;
+}
+
+.segmentMarker.active {
+  background: var(--color-white);
+}
+
+.teethIndicator {
+  display: flex;
+  justify-content: space-around;
+  font-size: 1.5rem;
+}
+
+.toothSection {
+  opacity: 0.4;
+  transition: opacity 0.3s, transform 0.3s;
+}
+
+.toothSection.current {
+  opacity: 1;
+  transform: scale(1.3);
+}

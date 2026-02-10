@@ -1,0 +1,238 @@
+.container {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+.title {
+  font-size: 2rem;
+  color: var(--color-primary);
+  text-align: center;
+  margin-bottom: 0.5rem;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.sectionTitle {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--color-text);
+  margin: 0;
+}
+
+.sectionHint {
+  font-size: 0.9rem;
+  color: var(--color-text-light);
+  margin: 0;
+}
+
+.optionList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.radioOption {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  background: var(--color-white);
+  padding: 1rem;
+  border-radius: var(--border-radius);
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.radioOption:hover {
+  background: #f9f9f9;
+}
+
+.radioOption input {
+  margin-top: 0.25rem;
+  width: 18px;
+  height: 18px;
+  accent-color: var(--color-secondary);
+}
+
+.radioContent {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.radioLabel {
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.radioDescription {
+  font-size: 0.85rem;
+  color: var(--color-text-light);
+}
+
+.loadingVoices {
+  color: var(--color-text-light);
+  font-style: italic;
+  text-align: center;
+  padding: 1rem;
+}
+
+.voiceTip {
+  background: #fff9e6;
+  border: 1px solid #ffd54f;
+  border-radius: var(--border-radius);
+  padding: 0.75rem 1rem;
+  margin-bottom: 1rem;
+  font-size: 0.85rem;
+}
+
+.voiceTip strong {
+  color: #f57c00;
+  display: block;
+  margin-bottom: 0.25rem;
+}
+
+.voiceTip p {
+  margin: 0.25rem 0;
+  color: var(--color-text-light);
+}
+
+.accentGroup {
+  margin-bottom: 1rem;
+}
+
+.accentTitle {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--color-text);
+  margin: 0 0 0.5rem 0;
+  padding-bottom: 0.25rem;
+  border-bottom: 1px solid #eee;
+}
+
+.voiceGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 0.5rem;
+}
+
+.voiceButton {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  padding: 0.75rem 0.5rem;
+  background: var(--color-white);
+  border: 2px solid #e0e0e0;
+  border-radius: var(--border-radius);
+  cursor: pointer;
+  transition: all 0.2s;
+  min-height: 60px;
+}
+
+.voiceButton:hover {
+  border-color: var(--color-secondary);
+  transform: scale(1.02);
+}
+
+.voiceButton.selected {
+  background: var(--color-secondary);
+  border-color: var(--color-secondary);
+  color: white;
+}
+
+.voiceButton.previewing {
+  animation: pulse 0.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.05);
+  }
+}
+
+.voiceName {
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+
+.voiceDescription {
+  font-size: 0.7rem;
+  opacity: 0.8;
+}
+
+.previewIndicator {
+  font-size: 0.7rem;
+  opacity: 0.9;
+  animation: fadeInOut 1s ease-in-out infinite;
+}
+
+@keyframes fadeInOut {
+  0%, 100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.toggleOption {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  background: var(--color-white);
+  padding: 1rem;
+  border-radius: var(--border-radius);
+  cursor: pointer;
+}
+
+.toggleOption input {
+  margin-top: 0.25rem;
+  width: 20px;
+  height: 20px;
+  accent-color: var(--color-secondary);
+}
+
+.toggleContent {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.toggleLabel {
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.toggleDescription {
+  font-size: 0.85rem;
+  color: var(--color-text-light);
+}
+
+.dangerButton {
+  background: #f5f5f5;
+  border: 1px solid #ddd;
+  color: #d32f2f;
+  padding: 0.75rem 1rem;
+  font-size: 0.95rem;
+  align-self: flex-start;
+}
+
+.dangerButton:hover {
+  background: #ffebee;
+  border-color: #d32f2f;
+}
+
+.dangerHint {
+  font-size: 0.8rem;
+  color: var(--color-text-light);
+  margin: 0;
+}

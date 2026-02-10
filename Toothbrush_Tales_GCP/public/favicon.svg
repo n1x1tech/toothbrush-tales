@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Background circle with gradient -->
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#FF6B6B"/>
+      <stop offset="100%" style="stop-color:#4ECDC4"/>
+    </linearGradient>
+    <linearGradient id="brush" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#FFE66D"/>
+      <stop offset="100%" style="stop-color:#FFD93D"/>
+    </linearGradient>
+    <linearGradient id="bristles" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#FFFFFF"/>
+      <stop offset="100%" style="stop-color:#E8F5E9"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Circular background -->
+  <circle cx="256" cy="256" r="240" fill="url(#bg)" />
+
+  <!-- Sparkle top-left -->
+  <path d="M130 100 L135 115 L150 120 L135 125 L130 140 L125 125 L110 120 L125 115Z" fill="#FFE66D" opacity="0.9"/>
+
+  <!-- Sparkle top-right -->
+  <path d="M380 80 L384 92 L396 96 L384 100 L380 112 L376 100 L364 96 L376 92Z" fill="#FFFFFF" opacity="0.8"/>
+
+  <!-- Sparkle bottom -->
+  <path d="M360 370 L363 380 L373 383 L363 386 L360 396 L357 386 L347 383 L357 380Z" fill="#FFE66D" opacity="0.7"/>
+
+  <!-- Toothbrush handle -->
+  <rect x="145" y="180" width="30" height="200" rx="15" fill="url(#brush)" transform="rotate(-15, 256, 280)"/>
+
+  <!-- Toothbrush head -->
+  <rect x="135" y="130" width="50" height="65" rx="25" fill="url(#brush)" transform="rotate(-15, 256, 280)"/>
+
+  <!-- Bristles -->
+  <rect x="142" y="130" width="36" height="30" rx="5" fill="url(#bristles)" transform="rotate(-15, 256, 280)"/>
+
+  <!-- Tooth character - body -->
+  <ellipse cx="310" cy="270" rx="65" ry="80" fill="white"/>
+
+  <!-- Tooth character - roots -->
+  <ellipse cx="285" cy="340" rx="18" ry="30" fill="white"/>
+  <ellipse cx="335" cy="340" rx="18" ry="30" fill="white"/>
+
+  <!-- Tooth character - happy eyes -->
+  <ellipse cx="290" cy="250" rx="10" ry="12" fill="#2C3E50"/>
+  <ellipse cx="330" cy="250" rx="10" ry="12" fill="#2C3E50"/>
+
+  <!-- Eye sparkles -->
+  <circle cx="294" cy="246" r="3" fill="white"/>
+  <circle cx="334" cy="246" r="3" fill="white"/>
+
+  <!-- Happy mouth -->
+  <path d="M295 280 Q310 300 325 280" stroke="#FF6B6B" stroke-width="4" fill="none" stroke-linecap="round"/>
+
+  <!-- Rosy cheeks -->
+  <circle cx="278" cy="275" r="10" fill="#FFB3B3" opacity="0.5"/>
+  <circle cx="342" cy="275" r="10" fill="#FFB3B3" opacity="0.5"/>
+</svg>
