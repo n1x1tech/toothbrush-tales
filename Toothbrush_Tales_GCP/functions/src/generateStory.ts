@@ -1,12 +1,12 @@
 import { onCall, HttpsError } from 'firebase-functions/v2/https'
-import { AnthropicVertex } from '@anthropic-ai/vertex-sdk'
+import { GoogleAuth } from 'google-auth-library'
 
 // Vertex AI region where Claude is available
 const CLAUDE_REGION = 'us-east5'
+const CLAUDE_MODEL = 'claude-3-haiku@20240307'
 
-const client = new AnthropicVertex({
-  region: CLAUDE_REGION,
-  projectId: process.env.GCLOUD_PROJECT,
+const auth = new GoogleAuth({
+  scopes: ['https://www.googleapis.com/auth/cloud-platform'],
 })
 
 interface StoryRequest {
@@ -101,10 +101,38 @@ function createDynamicFallbackStory(characterName: string, theme: string): Story
   }
 }
 
+// Call Vertex AI Claude via REST API (avoids SDK subpath export issues)
+async function callVertexClaude(
+  systemPrompt: string,
+  userPrompt: string,
+): Promise<string> {
+  const client = await auth.getClient()
+  const projectId = await auth.getProjectId()
+
+  const url = `https://${CLAUDE_REGION}-aiplatform.googleapis.com/v1/projects/${projectId}/locations/${CLAUDE_REGION}/publishers/anthropic/models/${CLAUDE_MODEL}:rawPredict`
+
+  const body = {
+    anthropic_version: 'vertex-2023-10-16',
+    max_tokens: 2000,
+    temperature: 0.9,
+    system: systemPrompt,
+    messages: [{ role: 'user', content: userPrompt }],
+  }
+
+  const response = await client.request({
+    url,
+    method: 'POST',
+    data: body,
+    headers: { 'Content-Type': 'application/json' },
+  })
+
+  const data = response.data as { content: Array<{ type: string; text?: string }> }
+  const textContent = data.content[0]?.type === 'text' ? data.content[0].text || '' : ''
+  return textContent
+}
+
 // Helper function to call Vertex AI with retry logic
 async function invokeVertexWithRetry(
-  characterName: string,
-  theme: string,
   systemPrompt: string,
   userPrompt: string,
   maxRetries: number = 2
@@ -114,18 +142,7 @@ async function invokeVertexWithRetry(
   for (let attempt = 1; attempt <= maxRetries + 1; attempt++) {
     try {
       console.log(`[Story] Vertex AI attempt ${attempt}/${maxRetries + 1}`)
-      const response = await client.messages.create({
-        model: 'claude-3-haiku@20240307',
-        max_tokens: 2000,
-        system: systemPrompt,
-        messages: [{ role: 'user', content: userPrompt }],
-        temperature: 0.9,
-      })
-
-      const textContent = response.content[0].type === 'text'
-        ? response.content[0].text
-        : ''
-      return textContent
+      return await callVertexClaude(systemPrompt, userPrompt)
     } catch (error) {
       lastError = error as Error
       console.error(`[Story] Vertex AI attempt ${attempt} failed:`, error)
@@ -237,7 +254,7 @@ CRITICAL RULES:
     console.log(`[Story] Generating story for character="${characterName}", theme="${theme}"`)
 
     try {
-      const textContent = await invokeVertexWithRetry(characterName, theme, systemPrompt, userPrompt, 2)
+      const textContent = await invokeVertexWithRetry(systemPrompt, userPrompt, 2)
       console.log(`[Story] Vertex AI response received, length: ${textContent.length}`)
 
       // Parse the JSON from the response (handle potential markdown code blocks)

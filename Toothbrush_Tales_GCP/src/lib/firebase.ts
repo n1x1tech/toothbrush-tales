@@ -4,15 +4,14 @@ import { getFirestore } from 'firebase/firestore'
 import { getFunctions } from 'firebase/functions'
 import { getStorage } from 'firebase/storage'
 
-// TODO: Replace with your actual Firebase project config
-// Get this from Firebase Console > Project Settings > General > Your apps
 const firebaseConfig = {
-  apiKey: 'YOUR_API_KEY',
-  authDomain: 'YOUR_PROJECT_ID.firebaseapp.com',
-  projectId: 'YOUR_PROJECT_ID',
-  storageBucket: 'YOUR_PROJECT_ID.appspot.com',
-  messagingSenderId: 'YOUR_MESSAGING_SENDER_ID',
-  appId: 'YOUR_APP_ID',
+  apiKey: "AIzaSyCZxQW-_Hq-QBU58FsnFVBJHwTT0_Tc5s8",
+  authDomain: "toothbrush-tales.firebaseapp.com",
+  projectId: "toothbrush-tales",
+  storageBucket: "toothbrush-tales.firebasestorage.app",
+  messagingSenderId: "836626453942",
+  appId: "1:836626453942:web:7389883b4ae467456add17",
+  measurementId: "G-REW6043P3F"
 }
 
 const app = initializeApp(firebaseConfig)
