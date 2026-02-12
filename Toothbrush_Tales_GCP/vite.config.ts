@@ -66,15 +66,7 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2}'],
-        // IMPORTANT: Do NOT cache Firebase Cloud Functions calls!
-        // Story generation and TTS can take 10-60 seconds and must always be fresh.
-        // Caching these caused stories to repeat when AI was slow.
         runtimeCaching: [
-          {
-            // Firebase Cloud Functions - NEVER cache (story/TTS must be fresh)
-            urlPattern: /^https:\/\/.*\.cloudfunctions\.net\/.*/i,
-            handler: 'NetworkOnly',
-          },
           {
             // Cache Google Fonts
             urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,

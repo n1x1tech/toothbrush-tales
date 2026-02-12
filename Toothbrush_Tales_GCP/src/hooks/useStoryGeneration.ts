@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react'
-import { httpsCallable } from 'firebase/functions'
-import { functions } from '../lib/firebase'
+import { db } from '../lib/firebase'
+import { collection, addDoc, onSnapshot, doc } from 'firebase/firestore'
+import { ensureAuth } from '../lib/firebase'
 
 // Story type for frontend use
 export interface Story {
@@ -64,13 +65,59 @@ export function useStoryGeneration() {
     setError(null)
 
     try {
-      const generateStoryFn = httpsCallable(functions, 'generateStory')
-      const result = await generateStoryFn({ characterName, theme })
+      // Ensure user is authenticated before writing to Firestore
+      await ensureAuth()
 
-      console.log(`[StoryGen] Story received from Cloud Function`)
-      return result.data as Story
+      // Write request to Firestore - triggers the Cloud Function
+      const docRef = await addDoc(collection(db, 'storyRequests'), {
+        characterName,
+        theme,
+        status: 'pending',
+        createdAt: new Date(),
+      })
+
+      console.log(`[StoryGen] Request written to Firestore: ${docRef.id}`)
+
+      // Wait for the function to process and write back the result
+      return await new Promise<Story>((resolve) => {
+        const timeout = setTimeout(() => {
+          unsubscribe()
+          console.warn('[StoryGen] Timed out waiting for story, using fallback')
+          setError(new Error('Story generation timed out'))
+          resolve(createFallbackStory(characterName, theme))
+        }, 30000) // 30s timeout
+
+        const unsubscribe = onSnapshot(doc(db, 'storyRequests', docRef.id), (snap) => {
+          const data = snap.data()
+          if (!data) return
+
+          if (data.status === 'complete') {
+            clearTimeout(timeout)
+            unsubscribe()
+            console.log('[StoryGen] Story received from Firestore')
+            resolve({
+              id: data.id || docRef.id,
+              characterName: data.characterName,
+              theme: data.theme,
+              intro: data.intro,
+              segments: data.segments,
+              brushingPrompts: data.brushingPrompts,
+              conclusion: data.conclusion,
+              audioUrl: data.audioUrl || null,
+              isFavorite: data.isFavorite || false,
+              isFallback: data.isFallback || false,
+            })
+          } else if (data.status === 'error') {
+            clearTimeout(timeout)
+            unsubscribe()
+            console.warn('[StoryGen] Function returned error, using fallback')
+            setError(new Error(data.error || 'Story generation failed'))
+            resolve(createFallbackStory(characterName, theme))
+          }
+        })
+      })
     } catch (err) {
-      console.warn('[StoryGen] API unavailable, using fallback story:', err)
+      console.warn('[StoryGen] Error, using fallback story:', err)
       setError(err instanceof Error ? err : new Error('Story generation unavailable'))
       return createFallbackStory(characterName, theme)
     } finally {

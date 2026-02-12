@@ -35,7 +35,7 @@ export const useAppStore = create<AppState>()(
     (set, get) => ({
       // Default settings
       playbackMode: 'both',
-      voiceId: 'Joanna', // Maps to en-US-Neural2-C on Google Cloud TTS
+      voiceId: 'Joanna', // Maps to en-US-Journey-F on Google Cloud TTS (natural voice)
       autoPlay: true,
 
       // Current story

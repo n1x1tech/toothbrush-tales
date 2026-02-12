@@ -57,7 +57,7 @@ export default function StoryPlayer({
     <div className={styles.container}>
       {showPrompt && currentSegment >= 0 && currentSegment < 4 && (
         <div className={styles.brushingPrompt}>
-          <span className={styles.promptIcon}>{'\uD83E\uDEB9'}</span>
+          <span className={styles.promptIcon}>{'\uD83E\uDDB7'}</span>
           <span className={styles.promptText}>
             {story.brushingPrompts[currentSegment]}
           </span>

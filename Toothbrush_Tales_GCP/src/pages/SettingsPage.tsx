@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react'
-import { httpsCallable } from 'firebase/functions'
-import { functions } from '../lib/firebase'
 import { useAppStore, PlaybackMode } from '../store/useAppStore'
+import { db, ensureAuth } from '../lib/firebase'
+import { collection, addDoc, onSnapshot, doc } from 'firebase/firestore'
 import styles from './SettingsPage.module.css'
 
 const PLAYBACK_MODES: { value: PlaybackMode; label: string; description: string }[] = [
@@ -20,19 +20,19 @@ interface TTSVoice {
 
 const TTS_VOICES: TTSVoice[] = [
   // Australian
-  { id: 'Olivia', name: 'Olivia', accent: 'Australian', description: 'Warm & natural' },
+  { id: 'Olivia', name: 'Olivia', accent: 'Australian', description: 'Natural & warm' },
 
   // British
-  { id: 'Amy', name: 'Amy', accent: 'British', description: 'Clear & friendly' },
-  { id: 'Emma', name: 'Emma', accent: 'British', description: 'Warm' },
+  { id: 'Amy', name: 'Amy', accent: 'British', description: 'Natural & clear' },
+  { id: 'Emma', name: 'Emma', accent: 'British', description: 'Natural & warm' },
   { id: 'Brian', name: 'Brian', accent: 'British', description: 'Gentle' },
   { id: 'Arthur', name: 'Arthur', accent: 'British', description: 'Warm' },
 
   // American
-  { id: 'Ivy', name: 'Ivy', accent: 'American', description: 'Child-like (Recommended)' },
-  { id: 'Kevin', name: 'Kevin', accent: 'American', description: 'Boy voice' },
-  { id: 'Joanna', name: 'Joanna', accent: 'American', description: 'Warm & friendly' },
-  { id: 'Matthew', name: 'Matthew', accent: 'American', description: 'Gentle' },
+  { id: 'Joanna', name: 'Joanna', accent: 'American', description: 'Natural & friendly (Recommended)' },
+  { id: 'Kevin', name: 'Kevin', accent: 'American', description: 'Natural & casual' },
+  { id: 'Matthew', name: 'Matthew', accent: 'American', description: 'Natural & gentle' },
+  { id: 'Ivy', name: 'Ivy', accent: 'American', description: 'Studio quality' },
   { id: 'Ruth', name: 'Ruth', accent: 'American', description: 'Expressive' },
   { id: 'Salli', name: 'Salli', accent: 'American', description: 'Friendly' },
   { id: 'Joey', name: 'Joey', accent: 'American', description: 'Casual' },
@@ -57,7 +57,7 @@ export default function SettingsPage() {
   const [previewError, setPreviewError] = useState<string | null>(null)
   const audioRef = useRef<HTMLAudioElement | null>(null)
 
-  // Preview a voice using Google Cloud TTS
+  // Preview a voice using Google Cloud TTS via Firestore
   const previewVoice = async (voice: TTSVoice) => {
     // Stop any current playback
     if (audioRef.current) {
@@ -69,17 +69,40 @@ export default function SettingsPage() {
     setPreviewError(null)
 
     try {
-      const synthesizeSpeechFn = httpsCallable(functions, 'synthesizeSpeech')
-      const result = await synthesizeSpeechFn({
+      await ensureAuth()
+
+      // Write TTS request to Firestore
+      const docRef = await addDoc(collection(db, 'ttsRequests'), {
         text: `Hi there! I'm ${voice.name}. Let's brush those teeth and make them sparkle!`,
         voiceId: voice.id,
+        status: 'pending',
+        createdAt: new Date(),
       })
 
-      if (!result.data) {
-        throw new Error('No audio data returned')
-      }
+      // Wait for the function to process
+      const audioUrl = await new Promise<string>((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          unsubscribe()
+          reject(new Error('Voice preview timed out'))
+        }, 15000)
 
-      const audio = new Audio(result.data as string)
+        const unsubscribe = onSnapshot(doc(db, 'ttsRequests', docRef.id), (snap) => {
+          const data = snap.data()
+          if (!data) return
+
+          if (data.status === 'complete' && data.audioData) {
+            clearTimeout(timeout)
+            unsubscribe()
+            resolve(data.audioData)
+          } else if (data.status === 'error') {
+            clearTimeout(timeout)
+            unsubscribe()
+            reject(new Error(data.error || 'TTS failed'))
+          }
+        })
+      })
+
+      const audio = new Audio(audioUrl)
       audioRef.current = audio
 
       audio.onended = () => setPreviewingVoice(null)

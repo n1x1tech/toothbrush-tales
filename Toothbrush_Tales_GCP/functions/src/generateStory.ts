@@ -1,69 +1,46 @@
-import { onCall, HttpsError } from 'firebase-functions/v2/https'
-import { GoogleAuth } from 'google-auth-library'
+import * as functions from 'firebase-functions/v1'
+import { VertexAI } from '@google-cloud/vertexai'
 
-// Vertex AI region where Claude is available
-const CLAUDE_REGION = 'us-east5'
-const CLAUDE_MODEL = 'claude-3-haiku@20240307'
+const vertexAI = new VertexAI({ project: 'toothbrush-tales', location: 'us-central1' })
+const geminiModel = vertexAI.getGenerativeModel({ model: 'gemini-2.0-flash' })
 
-const auth = new GoogleAuth({
-  scopes: ['https://www.googleapis.com/auth/cloud-platform'],
-})
-
-interface StoryRequest {
-  characterName: string
-  theme: string
-}
-
-interface StoryResponse {
-  id: string
-  characterName: string
-  theme: string
-  intro: string
-  segments: string[]
-  brushingPrompts: string[]
-  conclusion: string
-  audioUrl: string | null
-  isFavorite: boolean
-  isFallback: boolean
-}
-
-// Dynamic fallback story templates that actually use the theme
+// Dynamic fallback story templates that actually use the theme (~200 words each)
 const STORY_TEMPLATES = [
   {
     intro: (name: string, theme: string) =>
-      `Hold onto your toothbrush because ${name} is about to have an incredible adventure! This is the story of ${name} who is ${theme}. Ready? Let's go!`,
+      `Hold onto your toothbrush! ${name} is about to ${theme}. Let's go!`,
     segments: (name: string, theme: string) => [
-      `${name} couldn't believe it - today was finally the day to ${theme}! With a toothbrush in hand and a sparkly smile, ${name} was ready for anything. WHOOOOSH! A magical wind swept through, and suddenly everything around ${name} started to shimmer and glow. "This is going to be amazing!" ${name} cheered, bouncing with excitement.`,
-      `But wait - there was a problem! To truly ${theme}, ${name} needed to solve a tricky puzzle first. CRACK! A friendly talking squirrel appeared. "I can help," it squeaked, "but only if your teeth are super sparkly!" ${name} grinned wide, showing off those clean chompers. "Let's do this!" they shouted together.`,
-      `${name} and the squirrel zoomed through magical clouds, past rainbow waterfalls, and over mountains made of marshmallows - all while continuing to ${theme}! SPARKLE SPARKLE! Everything was going perfectly until - oh no! - a silly obstacle appeared. But ${name} wasn't worried. With a bright smile and quick thinking, the problem was solved in a flash!`,
-      `"You did it!" everyone cheered as ${name} finished the adventure of ${theme}. HOORAY! Confetti rained down, and ${name}'s teeth sparkled brighter than ever. The squirrel did a happy dance. "That was the best adventure ever," ${name} laughed. And it all started with a great brushing session!`
+      `${name} couldn't believe it - today was the day to ${theme}! WHOOOOSH! A magical wind swept through and everything started to shimmer. "This is amazing!" ${name} cheered, bouncing with excitement and flashing a sparkly smile.`,
+      `But wait - a problem! A friendly talking squirrel appeared. CRACK! "I can help," it squeaked, "but only if your teeth are super sparkly!" ${name} grinned wide, showing off those clean chompers. "Let's do this!" they shouted together.`,
+      `${name} and the squirrel zoomed through magical clouds and past rainbow waterfalls! SPARKLE SPARKLE! A silly obstacle appeared, but ${name} wasn't worried. With a bright smile and quick thinking, the problem was solved in a flash!`,
+      `"You did it!" everyone cheered as ${name} finished ${theme}. HOORAY! Confetti rained down and ${name}'s teeth sparkled brighter than ever. "Best adventure ever!" ${name} laughed. It all started with great brushing!`
     ],
     conclusion: (name: string, theme: string) =>
-      `What an adventure! ${name} conquered ${theme} with flying colors! Your teeth are sparkling like stars - you're officially an adventure champion!`
+      `Amazing! ${name} conquered ${theme}! Your teeth are sparkling like stars!`
   },
   {
     intro: (name: string, theme: string) =>
-      `Get ready for an epic tale! ${name} is about to discover what happens when ${theme} becomes the adventure of a lifetime! Grab your toothbrush and let's go!`,
+      `Epic tale time! ${name} is about to ${theme}. Grab your toothbrush!`,
     segments: (name: string, theme: string) => [
-      `${name} woke up with a feeling that today would be special. And ${name} was right! The moment ${name} started thinking about ${theme}, something magical happened. FLASH! A golden ticket appeared out of thin air. "Your adventure awaits," it read. ${name} pumped a fist in the air. "Yes! Let's go!"`,
-      `Following the golden ticket's map, ${name} discovered a secret garden where everything was connected to ${theme}. But a grumpy garden gnome blocked the path. "Only those with the brightest smiles may enter!" he declared. PING! ${name}'s teeth twinkled in the sunlight. The gnome's jaw dropped. "Wow, those are some impressive teeth!"`,
-      `Inside the garden, ${name} had to complete three challenges - all related to ${theme}. SWOOSH! ZOOM! SPLASH! Each one was trickier than the last, but ${name} never gave up. With every challenge conquered, ${name}'s confidence grew stronger. "I can do anything!" ${name} declared, striking a superhero pose.`,
-      `The final challenge was the biggest yet, but ${name} was ready. Using everything learned during the ${theme} adventure, ${name} solved it brilliantly! KABOOM! Fireworks exploded in celebration. "You're a true hero!" the gnome cheered, no longer grumpy at all. ${name} took a bow, grinning from ear to ear.`
+      `${name} knew today was special. FLASH! A golden ticket appeared. "Your adventure awaits," it read. ${name} was going to ${theme}! "Yes! Let's go!" ${name} pumped a fist in the air.`,
+      `Following the map, ${name} found a secret garden connected to ${theme}. A grumpy gnome blocked the path. "Only the brightest smiles may enter!" PING! ${name}'s teeth twinkled. The gnome's jaw dropped. "Impressive!"`,
+      `Inside, ${name} faced three challenges. SWOOSH! ZOOM! SPLASH! Each one trickier than the last, but ${name} never gave up. "I can do anything!" ${name} declared, striking a superhero pose with a gleaming grin.`,
+      `The final challenge was the biggest, but ${name} was ready. KABOOM! Fireworks exploded as ${name} solved it brilliantly! "You're a true hero!" the gnome cheered. ${name} took a bow, grinning ear to ear.`
     ],
     conclusion: (name: string, theme: string) =>
-      `Incredible! ${name} mastered the ${theme} challenge like a true champion! Those sparkling teeth helped save the day. You're amazing!`
+      `Incredible! ${name} mastered ${theme}! Those sparkling teeth saved the day!`
   },
   {
     intro: (name: string, theme: string) =>
-      `Buckle up for adventure! When ${name} decided to ${theme}, nobody expected what would happen next! This is going to be wild!`,
+      `Buckle up! ${name} is about to ${theme}. This is going to be wild!`,
     segments: (name: string, theme: string) => [
-      `${name} had always dreamed about ${theme}, and today that dream was coming true! VROOM! A rocket-powered skateboard appeared at ${name}'s feet. "Cool!" ${name} exclaimed, hopping on. The skateboard zoomed forward, taking ${name} on the first leg of this epic ${theme} journey. Wind whooshed past as ${name} laughed with joy.`,
-      `Suddenly, the skateboard stopped at a bubbling brook. A wise old owl perched on a branch nearby. "To continue your journey of ${theme}, you must answer my riddle," the owl hooted. HOOT HOOT! ${name} thought hard, teeth gleaming in concentration. "I've got it!" ${name} shouted, and the owl nodded approvingly.`,
-      `With the riddle solved, ${name} soared through candy-colored skies, getting closer and closer to completing ${theme}. WHOOOOSH! But then came the twistiest twist - a maze of mirrors! ${name} could see a hundred reflections, all smiling back. "My sparkly teeth will light the way!" And they did! SHIMMER SHIMMER!`,
-      `${name} burst through the final mirror and landed in a celebration parade! Everyone was cheering because ${name} had done it - ${theme} was complete! HOORAY! Balloons floated everywhere, and a marching band played a victory song. ${name} waved to the crowd, feeling like the happiest kid in the universe.`
+      `${name} had always dreamed about ${theme}, and today it was happening! VROOM! A rocket skateboard appeared. "Cool!" ${name} hopped on, zooming forward with wind whooshing past and a huge grin.`,
+      `The skateboard stopped at a bubbling brook. A wise owl perched nearby. "Answer my riddle to continue!" it hooted. HOOT HOOT! ${name} thought hard, teeth gleaming. "Got it!" The owl nodded approvingly.`,
+      `${name} soared through candy-colored skies! WHOOOOSH! Then came a maze of mirrors with a hundred reflections smiling back. "My sparkly teeth will light the way!" And they did! SHIMMER SHIMMER!`,
+      `${name} burst through the final mirror into a celebration parade! HOORAY! Everyone cheered because ${theme} was complete! Balloons floated everywhere as ${name} waved, feeling like the happiest kid ever.`
     ],
     conclusion: (name: string, theme: string) =>
-      `AMAZING! ${name} finished the ${theme} adventure in spectacular style! Those super-clean teeth were the secret weapon all along. You're a superstar!`
+      `${name} finished ${theme} in style! Super-clean teeth were the secret weapon!`
   }
 ]
 
@@ -78,7 +55,20 @@ function formatNames(characterName: string): string {
   return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`
 }
 
-function createDynamicFallbackStory(characterName: string, theme: string): StoryResponse {
+interface StoryResult {
+  id: string
+  characterName: string
+  theme: string
+  intro: string
+  segments: string[]
+  brushingPrompts: string[]
+  conclusion: string
+  audioUrl: string | null
+  isFavorite: boolean
+  isFallback: boolean
+}
+
+function createDynamicFallbackStory(characterName: string, theme: string): StoryResult {
   const template = STORY_TEMPLATES[Math.floor(Math.random() * STORY_TEMPLATES.length)]
   const displayName = formatNames(characterName)
 
@@ -101,34 +91,17 @@ function createDynamicFallbackStory(characterName: string, theme: string): Story
   }
 }
 
-// Call Vertex AI Claude via REST API (avoids SDK subpath export issues)
-async function callVertexClaude(
+// Call Vertex AI Gemini 2.0 Flash
+async function generateStoryWithGemini(
   systemPrompt: string,
   userPrompt: string,
 ): Promise<string> {
-  const client = await auth.getClient()
-  const projectId = await auth.getProjectId()
-
-  const url = `https://${CLAUDE_REGION}-aiplatform.googleapis.com/v1/projects/${projectId}/locations/${CLAUDE_REGION}/publishers/anthropic/models/${CLAUDE_MODEL}:rawPredict`
-
-  const body = {
-    anthropic_version: 'vertex-2023-10-16',
-    max_tokens: 2000,
-    temperature: 0.9,
-    system: systemPrompt,
-    messages: [{ role: 'user', content: userPrompt }],
-  }
-
-  const response = await client.request({
-    url,
-    method: 'POST',
-    data: body,
-    headers: { 'Content-Type': 'application/json' },
+  const result = await geminiModel.generateContent({
+    systemInstruction: { role: 'system', parts: [{ text: systemPrompt }] },
+    contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
+    generationConfig: { temperature: 0.9, maxOutputTokens: 2000 },
   })
-
-  const data = response.data as { content: Array<{ type: string; text?: string }> }
-  const textContent = data.content[0]?.type === 'text' ? data.content[0].text || '' : ''
-  return textContent
+  return result.response.candidates?.[0]?.content?.parts?.[0]?.text || ''
 }
 
 // Helper function to call Vertex AI with retry logic
@@ -141,11 +114,11 @@ async function invokeVertexWithRetry(
 
   for (let attempt = 1; attempt <= maxRetries + 1; attempt++) {
     try {
-      console.log(`[Story] Vertex AI attempt ${attempt}/${maxRetries + 1}`)
-      return await callVertexClaude(systemPrompt, userPrompt)
+      console.log(`[Story] Gemini attempt ${attempt}/${maxRetries + 1}`)
+      return await generateStoryWithGemini(systemPrompt, userPrompt)
     } catch (error) {
       lastError = error as Error
-      console.error(`[Story] Vertex AI attempt ${attempt} failed:`, error)
+      console.error(`[Story] Gemini attempt ${attempt} failed:`, error)
 
       if (attempt <= maxRetries) {
         const delay = Math.pow(2, attempt - 1) * 1000
@@ -155,33 +128,35 @@ async function invokeVertexWithRetry(
     }
   }
 
-  throw lastError || new Error('All Vertex AI retry attempts failed')
+  throw lastError || new Error('All Gemini retry attempts failed')
 }
 
-export const generateStory = onCall(
-  {
-    timeoutSeconds: 60,
-    memory: '512MiB',
-    region: 'us-central1',
-  },
-  async (request) => {
-    const { characterName, theme } = request.data as StoryRequest
+// Firestore-triggered function: listens for new story requests
+export const onStoryRequest = functions
+  .region('us-central1')
+  .runWith({ timeoutSeconds: 60, memory: '512MB' })
+  .firestore.document('storyRequests/{requestId}')
+  .onCreate(async (snap) => {
+    try {
+      const data = snap.data()
+      const { characterName, theme } = data
 
-    if (!characterName || !theme) {
-      throw new HttpsError('invalid-argument', 'characterName and theme are required')
-    }
+      if (!characterName || !theme) {
+        await snap.ref.update({ status: 'error', error: 'characterName and theme are required' })
+        return
+      }
 
-    // Detect if multiple names are provided
-    const nameList = characterName
-      .split(/,\s*|\s+and\s+|\s+&\s+/)
-      .map((n: string) => n.trim())
-      .filter((n: string) => n.length > 0)
-    const isMultipleCharacters = nameList.length > 1
-    const characterGuidance = isMultipleCharacters
-      ? `MULTIPLE CHARACTERS: The story stars ${nameList.length} characters: ${nameList.join(', ')}. EVERY character must appear by name in EVERY segment. Give each character distinct actions and dialogue. They work as a team. Use each character's name at least once per segment.`
-      : `Use the character's name frequently (at least 2-3 times per segment).`
+      // Detect if multiple names are provided
+      const nameList = characterName
+        .split(/,\s*|\s+and\s+|\s+&\s+/)
+        .map((n: string) => n.trim())
+        .filter((n: string) => n.length > 0)
+      const isMultipleCharacters = nameList.length > 1
+      const characterGuidance = isMultipleCharacters
+        ? `MULTIPLE CHARACTERS: The story stars ${nameList.length} characters: ${nameList.join(', ')}. EVERY character must appear by name in EVERY segment. Give each character distinct actions and dialogue. They work as a team. Use each character's name at least once per segment.`
+        : `Use the character's name frequently (at least 2-3 times per segment).`
 
-    const systemPrompt = `You are an award-winning children's storyteller creating engaging 2-minute adventure stories for 6-10 year olds. Your stories are designed to be read aloud during toothbrushing time.
+      const systemPrompt = `You are an award-winning children's storyteller creating engaging 2-minute adventure stories for 6-10 year olds. Your stories are designed to be read aloud during toothbrushing time.
 
 CRITICAL STORY REQUIREMENTS:
 1. Create ONE coherent story with a clear narrative arc (beginning \u2192 problem/adventure \u2192 resolution \u2192 celebration)
@@ -201,21 +176,26 @@ WRITING STYLE:
 - Make it feel like a real adventure with stakes and challenges
 
 STORY STRUCTURE:
-- Intro (8-10 seconds): Exciting hook that introduces ${isMultipleCharacters ? 'all characters by name' : 'the character'} and the specific adventure theme
-- Segment 1 (30 seconds, ~70 words): Set the scene directly in the theme's world/scenario
-- Segment 2 (30 seconds, ~70 words): The theme-specific adventure deepens, introduce a challenge related to the theme
-- Segment 3 (30 seconds, ~70 words): Climax - the most exciting moment tied directly to the theme
-- Segment 4 (30 seconds, ~70 words): Resolution - how the theme-specific adventure concludes
-- Conclusion (10 seconds): Celebrate success, connect to clean teeth achievement`
+- Intro (5 seconds, ~15 words): Short exciting hook that introduces ${isMultipleCharacters ? 'all characters by name' : 'the character'} and the adventure
+- Segment 1 (25 seconds, ~40-50 words): Set the scene directly in the theme's world/scenario
+- Segment 2 (25 seconds, ~40-50 words): The adventure deepens, introduce a challenge
+- Segment 3 (25 seconds, ~40-50 words): Climax - the most exciting moment
+- Segment 4 (25 seconds, ~40-50 words): Resolution - how the adventure concludes
+- Conclusion (5 seconds, ~15 words): Celebrate success, connect to clean teeth
 
-    const characterDescription = isMultipleCharacters
-      ? `${nameList.join(', ')} who are`
-      : `"${characterName}" who is`
-    const nameInstruction = isMultipleCharacters
-      ? `Mention EACH character (${nameList.join(', ')}) by name in every segment - give them each distinct actions`
-      : `Mention ${characterName} by name 2-3 times per segment`
+CRITICAL LENGTH CONSTRAINT:
+- The TOTAL story (intro + all 4 segments + conclusion) must be under 210 words
+- Keep it punchy and fast-paced - every word counts
+- Do NOT pad segments with filler or repetition`
 
-    const userPrompt = `Create a toothbrushing adventure story about ${characterDescription} ${theme}.
+      const characterDescription = isMultipleCharacters
+        ? `${nameList.join(', ')} who are`
+        : `"${characterName}" who is`
+      const nameInstruction = isMultipleCharacters
+        ? `Mention EACH character (${nameList.join(', ')}) by name in every segment - give them each distinct actions`
+        : `Mention ${characterName} by name 2-3 times per segment`
+
+      const userPrompt = `Create a toothbrushing adventure story about ${characterDescription} ${theme}.
 
 THE THEME "${theme}" IS THE PLOT: This isn't just a detail - the ENTIRE story must be about ${characterName} experiencing this specific scenario. Every segment should advance this particular adventure, not a generic one.
 
@@ -223,12 +203,12 @@ IMPORTANT: Write a SINGLE CONTINUOUS STORY where each segment flows into the nex
 
 Respond with ONLY valid JSON (no other text, no markdown code blocks):
 {
-  "intro": "An exciting 1-2 sentence hook about ${characterName} starting their ${theme} adventure",
+  "intro": "A short exciting hook (10-15 words) about ${characterName} starting their ${theme} adventure",
   "segments": [
-    "First paragraph (60-80 words) - ${characterName} begins the ${theme} adventure",
-    "Second paragraph (60-80 words) - the ${theme} adventure continues with a challenge",
-    "Third paragraph (60-80 words) - the exciting climax of the ${theme} adventure",
-    "Fourth paragraph (60-80 words) - ${characterName} succeeds in the ${theme} adventure"
+    "First paragraph (40-50 words) - ${characterName} begins the ${theme} adventure",
+    "Second paragraph (40-50 words) - the ${theme} adventure continues with a challenge",
+    "Third paragraph (40-50 words) - the exciting climax of the ${theme} adventure",
+    "Fourth paragraph (40-50 words) - ${characterName} succeeds in the ${theme} adventure"
   ],
   "brushingPrompts": [
     "Now brush your bottom teeth nice and clean!",
@@ -236,13 +216,14 @@ Respond with ONLY valid JSON (no other text, no markdown code blocks):
     "You're doing amazing! Brush the left side!",
     "Almost done! Brush the right side!"
   ],
-  "conclusion": "A celebratory ending connecting the ${theme} success to sparkling teeth (1-2 sentences)"
+  "conclusion": "A short celebratory ending (10-15 words) connecting ${theme} success to sparkling teeth"
 }
 
 CRITICAL RULES:
 - EVERY segment must directly involve the "${theme}" scenario - this is the heart of the story
 - Each segment must contain ONLY the story text - NO labels like "Segment 1", NO word counts, NO formatting instructions
-- Each segment MUST be 60-80 words of pure story
+- Each segment MUST be 40-50 words of pure story (NOT more!)
+- The TOTAL story must be under 210 words including intro and conclusion
 - Story must be COHERENT - same characters, same "${theme}" adventure throughout all 4 segments
 - Include fun sound effects in EVERY segment (WHOOSH! SPLASH! ZOOM! CRASH! SPARKLE!)
 - ${nameInstruction}
@@ -251,44 +232,64 @@ CRITICAL RULES:
 - The intro should be exciting and mention putting the toothbrush in their mouth
 - The conclusion should celebrate both the ${theme} adventure ending AND their clean sparkly teeth`
 
-    console.log(`[Story] Generating story for character="${characterName}", theme="${theme}"`)
+      console.log(`[Story] Generating story for character="${characterName}", theme="${theme}"`)
 
-    try {
-      const textContent = await invokeVertexWithRetry(systemPrompt, userPrompt, 2)
-      console.log(`[Story] Vertex AI response received, length: ${textContent.length}`)
+      try {
+        const textContent = await invokeVertexWithRetry(systemPrompt, userPrompt, 2)
+        console.log(`[Story] Gemini response received, length: ${textContent.length}`)
 
-      // Parse the JSON from the response (handle potential markdown code blocks)
-      let jsonString = textContent.trim()
-      if (jsonString.startsWith('```json')) {
-        jsonString = jsonString.slice(7)
+        // Parse the JSON from the response (handle potential markdown code blocks)
+        let jsonString = textContent.trim()
+        if (jsonString.startsWith('```json')) {
+          jsonString = jsonString.slice(7)
+        }
+        if (jsonString.startsWith('```')) {
+          jsonString = jsonString.slice(3)
+        }
+        if (jsonString.endsWith('```')) {
+          jsonString = jsonString.slice(0, -3)
+        }
+
+        const storyData = JSON.parse(jsonString.trim())
+        console.log('[Story] Successfully parsed story JSON')
+
+        const defaultBrushingPrompts = [
+          'Now brush your bottom teeth nice and clean!',
+          'Great job! Now brush your top teeth!',
+          "You're doing amazing! Brush the left side!",
+          'Almost done! Brush the right side!'
+        ]
+
+        // Ensure segments has exactly 4 story items (Gemini sometimes merges brushing prompts in)
+        const segments = Array.isArray(storyData.segments)
+          ? storyData.segments.slice(0, 4)
+          : storyData.segments
+
+        await snap.ref.update({
+          id: crypto.randomUUID(),
+          intro: storyData.intro,
+          segments,
+          brushingPrompts: storyData.brushingPrompts || defaultBrushingPrompts,
+          conclusion: storyData.conclusion,
+          audioUrl: null,
+          isFavorite: false,
+          isFallback: false,
+          status: 'complete',
+        })
+      } catch (error) {
+        console.error('[Story] Error generating story from Gemini:', error)
+        console.log(`[Story] Using dynamic fallback for character="${characterName}", theme="${theme}"`)
+
+        const fallback = createDynamicFallbackStory(characterName, theme)
+        await snap.ref.update({
+          ...fallback,
+          status: 'complete',
+        })
       }
-      if (jsonString.startsWith('```')) {
-        jsonString = jsonString.slice(3)
-      }
-      if (jsonString.endsWith('```')) {
-        jsonString = jsonString.slice(0, -3)
-      }
-
-      const storyData = JSON.parse(jsonString.trim())
-      console.log('[Story] Successfully parsed story JSON')
-
-      return {
-        id: crypto.randomUUID(),
-        characterName,
-        theme,
-        intro: storyData.intro,
-        segments: storyData.segments,
-        brushingPrompts: storyData.brushingPrompts,
-        conclusion: storyData.conclusion,
-        audioUrl: null,
-        isFavorite: false,
-        isFallback: false,
-      }
-    } catch (error) {
-      console.error('[Story] Error generating story from Vertex AI:', error)
-      console.log(`[Story] Using dynamic fallback for character="${characterName}", theme="${theme}"`)
-
-      return createDynamicFallbackStory(characterName, theme)
+    } catch (outerError) {
+      console.error('[Story] Fatal error (likely Firestore write failed):', outerError)
+      try {
+        await snap.ref.update({ status: 'error', error: 'Internal error' })
+      } catch { /* nothing more we can do */ }
     }
-  }
-)
+  })

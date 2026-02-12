@@ -1,12 +1,12 @@
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { httpsCallable } from 'firebase/functions'
-import { functions } from '../lib/firebase'
 import BrushTimer from '../components/timer/BrushTimer'
 import StoryPlayer from '../components/story/StoryPlayer'
 import PlaybackControls from '../components/story/PlaybackControls'
 import type { Story } from '../hooks/useStoryGeneration'
 import { useAppStore } from '../store/useAppStore'
+import { db, ensureAuth } from '../lib/firebase'
+import { collection, addDoc, onSnapshot, doc } from 'firebase/firestore'
 import styles from './StoryPage.module.css'
 
 // Fallback story if none provided (e.g., direct navigation to /story)
@@ -82,17 +82,51 @@ export default function StoryPage() {
     }
   }, [])
 
-  // Synthesize text to audio URL using Firebase callable function
+  // Synthesize text to audio URL using Firestore-triggered Cloud Function
   const synthesize = useCallback(async (text: string, voiceIdToUse: string): Promise<string | null> => {
     console.log('[TTS] synthesize called for voice:', voiceIdToUse)
     setIsSynthesizing(true)
     setTtsError(null)
     try {
-      const synthesizeSpeechFn = httpsCallable(functions, 'synthesizeSpeech')
-      const result = await synthesizeSpeechFn({ text, voiceId: voiceIdToUse })
+      await ensureAuth()
 
-      console.log('[TTS] synthesize result received, data length:', (result.data as string)?.length)
-      return result.data as string
+      // Write TTS request to Firestore - triggers the Cloud Function
+      const docRef = await addDoc(collection(db, 'ttsRequests'), {
+        text,
+        voiceId: voiceIdToUse,
+        status: 'pending',
+        createdAt: new Date(),
+      })
+
+      console.log('[TTS] Request written to Firestore:', docRef.id)
+
+      // Wait for the function to process and write back the audio data
+      return await new Promise<string | null>((resolve) => {
+        const timeout = setTimeout(() => {
+          unsubscribe()
+          console.warn('[TTS] Timed out waiting for audio')
+          setTtsError('Voice narration timed out')
+          resolve(null)
+        }, 15000) // 15s timeout
+
+        const unsubscribe = onSnapshot(doc(db, 'ttsRequests', docRef.id), (snap) => {
+          const data = snap.data()
+          if (!data) return
+
+          if (data.status === 'complete' && data.audioData) {
+            clearTimeout(timeout)
+            unsubscribe()
+            console.log('[TTS] Audio received from Firestore, data length:', data.audioData.length)
+            resolve(data.audioData)
+          } else if (data.status === 'error') {
+            clearTimeout(timeout)
+            unsubscribe()
+            console.error('[TTS] Function returned error:', data.error)
+            setTtsError('Voice narration unavailable')
+            resolve(null)
+          }
+        })
+      })
     } catch (error) {
       console.error('[TTS] Synthesis exception:', error)
       setTtsError('Voice narration unavailable - please check your connection')
