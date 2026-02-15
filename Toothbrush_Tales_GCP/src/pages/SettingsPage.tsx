@@ -141,7 +141,7 @@ export default function SettingsPage() {
 
   return (
     <div className={styles.container}>
-      <h1 className={styles.title}>Settings</h1>
+      <h1 className={styles.title}>Voice & Playback</h1>
 
       <section className={styles.section}>
         <h2 className={styles.sectionTitle}>Playback Mode</h2>

@@ -33,7 +33,8 @@ const createFallbackStory = (): Story => ({
   isFallback: true,
 })
 
-const INTRO_DURATION = 8000 // 8 seconds for intro
+const MIN_INTRO_DURATION = 5000 // Don't transition too fast
+const MAX_INTRO_DURATION = 25000 // Safety timeout
 
 export default function StoryPage() {
   const location = useLocation()
@@ -56,6 +57,9 @@ export default function StoryPage() {
   const [spokenSegments, setSpokenSegments] = useState<Set<number>>(new Set())
   const hasSpokenIntro = useRef(false)
   const audioUnlocked = useRef(false)
+  const introAudioDoneRef = useRef(false)
+  const introMinElapsedRef = useRef(false)
+  const onQueueItemCompleteRef = useRef<(() => void) | null>(null)
 
   // TTS state
   const [isSpeaking, setIsSpeaking] = useState(false)
@@ -268,21 +272,42 @@ export default function StoryPage() {
 
       console.log('[TTS] Processing item:', item.text.substring(0, 50) + '...')
 
+      // Reset audio element fully before each new play
+      const audio = audioRef.current
+      if (audio) {
+        audio.pause()
+        audio.removeAttribute('src')
+        audio.load()
+      }
+
       try {
         const audioUrl = await synthesize(item.text, item.voiceId)
         if (audioUrl) {
           console.log('[TTS] Got audio URL, playing...')
           await playAudioUrl(audioUrl)
           console.log('[TTS] Playback complete')
-          // Small delay between items to let browser stabilize
-          await new Promise(resolve => setTimeout(resolve, 100))
+          // Call completion callback if set
+          if (onQueueItemCompleteRef.current) {
+            onQueueItemCompleteRef.current()
+            onQueueItemCompleteRef.current = null
+          }
+          // Natural breathing pause between items
+          await new Promise(resolve => setTimeout(resolve, 300))
         } else {
           console.error('[TTS] synthesize returned null')
+          // Still call completion callback on failure so intro doesn't hang
+          if (onQueueItemCompleteRef.current) {
+            onQueueItemCompleteRef.current()
+            onQueueItemCompleteRef.current = null
+          }
         }
       } catch (error) {
         console.error('[TTS] Queue playback error:', error)
-        // On error, wait before trying next item
-        await new Promise(resolve => setTimeout(resolve, 200))
+        if (onQueueItemCompleteRef.current) {
+          onQueueItemCompleteRef.current()
+          onQueueItemCompleteRef.current = null
+        }
+        await new Promise(resolve => setTimeout(resolve, 300))
       }
     }
 
@@ -315,11 +340,13 @@ export default function StoryPage() {
     // Clear the queue
     audioQueueRef.current = []
     isProcessingQueueRef.current = false
+    onQueueItemCompleteRef.current = null
 
-    // Stop current audio (but keep the element for reuse)
+    // Stop current audio and fully clear state
     if (audioRef.current) {
       audioRef.current.pause()
-      audioRef.current.currentTime = 0
+      audioRef.current.removeAttribute('src')
+      audioRef.current.load()
     }
     setIsSpeaking(false)
   }, [])
@@ -343,15 +370,41 @@ export default function StoryPage() {
     addToHistory(story)
   }, [story, addToHistory])
 
-  // Transition from intro to brushing after INTRO_DURATION
+  // Transition from intro to brushing when audio finishes (with min/max bounds)
   useEffect(() => {
-    if (phase === 'intro') {
-      const timer = setTimeout(() => {
+    if (phase !== 'intro') return
+
+    const shouldPlayAudio = autoPlay && (playbackMode === 'audio' || playbackMode === 'both')
+
+    // Try to transition: both audio done AND min duration elapsed
+    const tryTransition = () => {
+      if (introAudioDoneRef.current && introMinElapsedRef.current) {
         setPhase('brushing')
-      }, INTRO_DURATION)
-      return () => clearTimeout(timer)
+      }
     }
-  }, [phase])
+
+    // Min duration timer — don't transition too fast
+    const minTimer = setTimeout(() => {
+      introMinElapsedRef.current = true
+      tryTransition()
+    }, MIN_INTRO_DURATION)
+
+    // Max duration timer — safety net
+    const maxTimer = setTimeout(() => {
+      console.warn('[TTS] Max intro duration reached, forcing transition')
+      setPhase('brushing')
+    }, MAX_INTRO_DURATION)
+
+    // For text-only mode, mark audio as "done" immediately
+    if (!shouldPlayAudio) {
+      introAudioDoneRef.current = true
+    }
+
+    return () => {
+      clearTimeout(minTimer)
+      clearTimeout(maxTimer)
+    }
+  }, [phase, autoPlay, playbackMode])
 
   // Get current text to speak
   const getCurrentText = useCallback(() => {
@@ -372,14 +425,16 @@ export default function StoryPage() {
       (playbackMode === 'audio' || playbackMode === 'both') &&
       !spokenSegments.has(currentSegment)
     ) {
-      // Queue brushing prompt + segment text (won't interrupt current playback)
+      // Queue brushing prompt and segment text as separate items for cleaner transitions
       const promptText = story.brushingPrompts[currentSegment] || ''
       const segmentText = story.segments[currentSegment] || ''
 
       console.log('[TTS] Conditions met, queueing segment', currentSegment)
       if (segmentText) {
-        const fullText = promptText ? `${promptText}... ${segmentText}` : segmentText
-        queueSpeech(fullText, voiceId)
+        if (promptText) {
+          queueSpeech(promptText, voiceId)
+        }
+        queueSpeech(segmentText, voiceId)
         setSpokenSegments(prev => new Set(prev).add(currentSegment))
       }
     }
@@ -443,6 +498,10 @@ export default function StoryPage() {
     console.log('[TTS] handleStartStory called')
     console.log('[TTS] Settings:', { autoPlay, playbackMode, voiceId })
 
+    // Reset intro tracking
+    introAudioDoneRef.current = false
+    introMinElapsedRef.current = false
+
     // Move to intro phase IMMEDIATELY (synchronously)
     setPhase('intro')
 
@@ -455,12 +514,9 @@ export default function StoryPage() {
       audioUnlocked.current = true
 
       // Unlock audio context from user gesture by playing a tiny silent sound
-      // This ensures subsequent queue-driven playback works on iOS/mobile
       try {
         const audio = audioRef.current
         if (audio) {
-          // Create a minimal silent audio to unlock the audio element
-          // This is a tiny valid MP3 frame (silence)
           audio.src = 'data:audio/mp3;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4Ljc2LjEwMAAAAAAAAAAAAAAA//tQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWGluZwAAAA8AAAACAAABhgC7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7//////////////////////////////////////////////////////////////////8AAAAATGF2YzU4LjEzAAAAAAAAAAAAAAAAJAAAAAAAAAAAAYYoRwSHAAAAAAAAAAAAAAAAAAAA//tQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWGluZwAAAA8AAAACAAABhgC7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7//////////////////////////////////////////////////////////////////8AAAAATGF2YzU4LjEzAAAAAAAAAAAAAAAAJAAAAAAAAAAAAYYoRwSHAAAAAAAAAAAAAAAAAAAA'
           await audio.play()
           audio.pause()
@@ -471,8 +527,17 @@ export default function StoryPage() {
         console.warn('[TTS] Audio unlock failed (may still work):', e)
       }
 
-      // Queue intro through the queue system to prevent race conditions
-      // with segment playback that starts after INTRO_DURATION
+      // Set completion callback — when intro audio finishes, mark it done
+      onQueueItemCompleteRef.current = () => {
+        console.log('[TTS] Intro audio finished')
+        introAudioDoneRef.current = true
+        // If min duration already elapsed, transition now
+        if (introMinElapsedRef.current) {
+          setPhase('brushing')
+        }
+      }
+
+      // Queue intro through the queue system
       console.log('[TTS] Queueing intro speech')
       queueSpeech(story.intro, voiceId)
     }
@@ -486,6 +551,14 @@ export default function StoryPage() {
     return (
       <div className={styles.container}>
         <div className={styles.waitingScreen}>
+          <div className={styles.sparkles}>
+            <span className={styles.sparkle}>{'\u2728'}</span>
+            <span className={styles.sparkle}>{'\u2B50'}</span>
+            <span className={styles.sparkle}>{'\uD83C\uDF1F'}</span>
+            <span className={styles.sparkle}>{'\u2728'}</span>
+            <span className={styles.sparkle}>{'\u2B50'}</span>
+            <span className={styles.sparkle}>{'\uD83C\uDF1F'}</span>
+          </div>
           <h1 className={styles.waitingTitle}>Ready to Brush?</h1>
           <p className={styles.waitingText}>
             Get your toothbrush ready and tap the button to start your adventure!

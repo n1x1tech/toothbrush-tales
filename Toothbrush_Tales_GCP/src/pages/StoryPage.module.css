@@ -88,6 +88,8 @@
   padding: 2rem;
   min-height: 60vh;
   gap: 1.5rem;
+  position: relative;
+  overflow: hidden;
 }
 
 .waitingTitle {
@@ -104,6 +106,37 @@
   line-height: 1.5;
 }
 
+.sparkles {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.sparkle {
+  position: absolute;
+  font-size: 1.4rem;
+  animation: float 3s ease-in-out infinite;
+  opacity: 0.6;
+}
+
+.sparkle:nth-child(1) { top: 10%; left: 12%; animation-delay: 0s; }
+.sparkle:nth-child(2) { top: 18%; right: 15%; animation-delay: 0.8s; }
+.sparkle:nth-child(3) { bottom: 22%; left: 8%; animation-delay: 1.5s; }
+.sparkle:nth-child(4) { bottom: 15%; right: 10%; animation-delay: 0.4s; }
+.sparkle:nth-child(5) { top: 40%; left: 5%; animation-delay: 1.1s; }
+.sparkle:nth-child(6) { top: 35%; right: 8%; animation-delay: 2s; }
+
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0) scale(1);
+    opacity: 0.5;
+  }
+  50% {
+    transform: translateY(-12px) scale(1.2);
+    opacity: 0.9;
+  }
+}
+
 .startButton {
   background: linear-gradient(135deg, var(--color-primary), #FF8E8E);
   color: white;
@@ -114,7 +147,7 @@
   border: none;
   cursor: pointer;
   box-shadow: 0 8px 20px rgba(255, 107, 107, 0.4);
-  animation: pulseGlow 2s infinite;
+  animation: floatButton 3s ease-in-out infinite, pulseGlow 2s infinite;
   transition: transform 0.2s;
 }
 
@@ -124,6 +157,15 @@
 
 .startButton:active {
   transform: scale(0.98);
+}
+
+@keyframes floatButton {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
 }
 
 @keyframes pulseGlow {

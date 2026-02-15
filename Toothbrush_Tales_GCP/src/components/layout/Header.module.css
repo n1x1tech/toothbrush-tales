@@ -1,7 +1,7 @@
 .header {
   background: var(--color-white);
   padding: 0.75rem 1.5rem;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+  box-shadow: var(--shadow-soft);
   position: sticky;
   top: 0;
   z-index: 100;
@@ -19,7 +19,10 @@
 }
 
 .logoIcon {
-  font-size: 1.75rem;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  object-fit: cover;
 }
 
 .logoText {
@@ -31,7 +34,7 @@
   background-clip: text;
 }
 
-.nav {
+.desktopNav {
   display: flex;
   gap: 0.25rem;
 }
@@ -56,6 +59,11 @@
   color: white;
 }
 
+/* Bottom nav - hidden on desktop */
+.bottomNav {
+  display: none;
+}
+
 @media (max-width: 768px) {
   .header {
     padding: 0.5rem 1rem;
@@ -66,11 +74,56 @@
   }
 
   .logoIcon {
-    font-size: 1.5rem;
+    width: 32px;
+    height: 32px;
   }
 
-  .navLink {
-    padding: 0.4rem 0.6rem;
-    font-size: 0.8rem;
+  /* Hide desktop nav on mobile */
+  .desktopNav {
+    display: none;
+  }
+
+  /* Show bottom tab bar on mobile */
+  .bottomNav {
+    display: flex;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: var(--color-white);
+    box-shadow: 0 -2px 12px rgba(0, 0, 0, 0.08);
+    z-index: 100;
+    justify-content: space-around;
+    padding: 0.25rem 0;
+    padding-bottom: env(safe-area-inset-bottom, 0.25rem);
+  }
+
+  .bottomNavLink {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-decoration: none;
+    color: var(--color-text-light);
+    font-weight: 600;
+    height: 56px;
+    min-width: 64px;
+    padding: 0.25rem 0.75rem;
+    border-radius: 12px;
+    transition: all 0.2s;
+  }
+
+  .bottomNavLink.active {
+    color: var(--color-secondary);
+  }
+
+  .bottomNavIcon {
+    font-size: 1.5rem;
+    line-height: 1;
+  }
+
+  .bottomNavLabel {
+    font-size: 0.7rem;
+    margin-top: 0.15rem;
   }
 }

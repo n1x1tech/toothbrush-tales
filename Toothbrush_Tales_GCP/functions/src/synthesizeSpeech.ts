@@ -32,6 +32,25 @@ const VOICES: Record<string, { name: string; languageCode: string }> = {
 
 const DEFAULT_VOICE = VOICES['Joanna']
 
+// Convert plain text to SSML with natural pauses
+function textToSsml(text: string): string {
+  // Escape XML special characters
+  let ssml = text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;')
+
+  // Add longer pause for ellipsis
+  ssml = ssml.replace(/\.{3}/g, '<break time="600ms"/>')
+
+  // Add pause after sentence-ending punctuation (. ! ?)
+  ssml = ssml.replace(/([.!?])\s+/g, '$1<break time="300ms"/> ')
+
+  return `<speak>${ssml}</speak>`
+}
+
 // Firestore-triggered function: listens for new TTS requests
 export const onTTSRequest = functions
   .region('us-central1')
@@ -54,7 +73,7 @@ export const onTTSRequest = functions
       try {
         const [response] = await ttsClient.synthesizeSpeech({
           input: {
-            text,
+            ssml: textToSsml(text),
           },
           voice: {
             name: voice.name,
@@ -63,7 +82,7 @@ export const onTTSRequest = functions
           audioConfig: {
             audioEncoding: 'MP3' as const,
             sampleRateHertz: 24000,
-            speakingRate: 1.05,
+            speakingRate: 0.88,
           },
         })
 
@@ -86,9 +105,9 @@ export const onTTSRequest = functions
           console.log('[TTS] Retrying with default voice (Joanna)')
           try {
             const [fallbackResponse] = await ttsClient.synthesizeSpeech({
-              input: { text },
+              input: { ssml: textToSsml(text) },
               voice: { name: DEFAULT_VOICE.name, languageCode: DEFAULT_VOICE.languageCode },
-              audioConfig: { audioEncoding: 'MP3' as const, sampleRateHertz: 22050 },
+              audioConfig: { audioEncoding: 'MP3' as const, sampleRateHertz: 24000, speakingRate: 0.88 },
             })
 
             if (fallbackResponse.audioContent) {

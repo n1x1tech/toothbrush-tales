@@ -7,32 +7,58 @@ export default function Header() {
   const isActive = (path: string) => location.pathname === path
 
   return (
-    <header className={styles.header}>
-      <Link to="/" className={styles.logo}>
-        <span className={styles.logoIcon}>{'\uD83E\uDDB7'}</span>
-        <span className={styles.logoText}>Toothbrush Tales</span>
-      </Link>
+    <>
+      <header className={styles.header}>
+        <Link to="/" className={styles.logo}>
+          <img src="/icons/header-logo.png" alt="Toothbrush Tales" className={styles.logoIcon} />
+          <span className={styles.logoText}>Toothbrush Tales</span>
+        </Link>
 
-      <nav className={styles.nav}>
+        <nav className={styles.desktopNav}>
+          <Link
+            to="/"
+            className={`${styles.navLink} ${isActive('/') ? styles.active : ''}`}
+          >
+            Home
+          </Link>
+          <Link
+            to="/history"
+            className={`${styles.navLink} ${isActive('/history') ? styles.active : ''}`}
+          >
+            History
+          </Link>
+          <Link
+            to="/settings"
+            className={`${styles.navLink} ${isActive('/settings') ? styles.active : ''}`}
+          >
+            Voice
+          </Link>
+        </nav>
+      </header>
+
+      <nav className={styles.bottomNav}>
         <Link
           to="/"
-          className={`${styles.navLink} ${isActive('/') ? styles.active : ''}`}
+          className={`${styles.bottomNavLink} ${isActive('/') ? styles.active : ''}`}
         >
-          Home
+          <span className={styles.bottomNavIcon}>{'\uD83C\uDFE0'}</span>
+          <span className={styles.bottomNavLabel}>Home</span>
         </Link>
         <Link
           to="/history"
-          className={`${styles.navLink} ${isActive('/history') ? styles.active : ''}`}
+          className={`${styles.bottomNavLink} ${isActive('/history') ? styles.active : ''}`}
         >
-          History
+          <span className={styles.bottomNavIcon}>{'\uD83D\uDCDA'}</span>
+          <span className={styles.bottomNavLabel}>History</span>
         </Link>
         <Link
           to="/settings"
-          className={`${styles.navLink} ${isActive('/settings') ? styles.active : ''}`}
+          className={`${styles.bottomNavLink} ${isActive('/settings') ? styles.active : ''}`}
         >
-          Settings
+          <span className={styles.bottomNavIcon}>{'\uD83D\uDD0A'}</span>
+          <span className={styles.bottomNavLabel}>Voice</span>
         </Link>
       </nav>
-    </header>
+    </>
   )
 }

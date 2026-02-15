@@ -11,7 +11,7 @@
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  background: var(--color-primary);
+  background: linear-gradient(135deg, var(--color-primary), #FF8E8E);
   color: white;
   padding: 2rem 3rem;
   border-radius: var(--border-radius);
@@ -34,7 +34,7 @@
 }
 
 .storyCard {
-  background: var(--color-white);
+  background: linear-gradient(135deg, #FFFDF7, #FFF9EE);
   border-radius: var(--border-radius);
   padding: 2rem;
   box-shadow: var(--shadow);
@@ -60,14 +60,14 @@
 }
 
 .celebrationEmojis {
-  font-size: 2rem;
+  font-size: 3rem;
   margin: 0.5rem 0;
-  animation: bounce 1s ease-in-out infinite;
+  animation: confetti 1.2s ease-in-out infinite;
 }
 
 .storyText {
-  font-size: 1.3rem;
-  line-height: 1.7;
+  font-size: 1.5rem;
+  line-height: 1.8;
   color: var(--color-text);
 }
 
@@ -109,12 +109,18 @@
   }
 }
 
-@keyframes bounce {
+@keyframes confetti {
   0%, 100% {
-    transform: translateY(0);
+    transform: translateY(0) scale(1);
+  }
+  25% {
+    transform: translateY(-6px) scale(1.1);
   }
   50% {
-    transform: translateY(-5px);
+    transform: translateY(0) scale(1);
+  }
+  75% {
+    transform: translateY(-3px) scale(1.05);
   }
 }
 
@@ -124,7 +130,7 @@
   }
 
   .storyText {
-    font-size: 1.1rem;
+    font-size: 1.2rem;
   }
 
   .brushingPrompt {

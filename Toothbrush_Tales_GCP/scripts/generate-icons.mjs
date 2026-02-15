@@ -1,12 +1,9 @@
 /**
- * Generate PWA icons from the favicon SVG.
+ * Generate PWA icons from a source PNG image.
  *
- * Usage: node scripts/generate-icons.mjs
+ * Usage: node scripts/generate-icons.mjs [path-to-source-image]
  *
- * Requires: npm install sharp (as a dev dependency)
- *
- * This reads public/favicon.svg and generates PNG icons at various sizes
- * into public/icons/.
+ * Requires: sharp (already a dependency)
  */
 
 import sharp from 'sharp'
@@ -17,7 +14,11 @@ import { fileURLToPath } from 'url'
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const projectRoot = join(__dirname, '..')
 
-const svgBuffer = readFileSync(join(projectRoot, 'public', 'favicon.svg'))
+// Source image — accept CLI arg or default
+const sourcePath = process.argv[2] || join(projectRoot, '..', '..', '..', 'Downloads', 'Toothbrush-tales_image.png')
+console.log('Source image:', sourcePath)
+
+const sourceBuffer = readFileSync(sourcePath)
 const iconsDir = join(projectRoot, 'public', 'icons')
 
 mkdirSync(iconsDir, { recursive: true })
@@ -38,25 +39,32 @@ const splashScreens = [
 async function generateIcons() {
   // Generate app icons
   for (const size of iconSizes) {
-    await sharp(svgBuffer)
-      .resize(size, size)
+    await sharp(sourceBuffer)
+      .resize(size, size, { fit: 'cover' })
       .png()
       .toFile(join(iconsDir, `icon-${size}x${size}.png`))
     console.log(`Generated icon-${size}x${size}.png`)
   }
 
   // Generate apple-touch-icon (180x180)
-  await sharp(svgBuffer)
-    .resize(180, 180)
+  await sharp(sourceBuffer)
+    .resize(180, 180, { fit: 'cover' })
     .png()
     .toFile(join(iconsDir, 'apple-touch-icon.png'))
   console.log('Generated apple-touch-icon.png')
 
-  // Generate splash screens (icon centered on colored background)
+  // Generate favicon.png (32x32) in public root
+  await sharp(sourceBuffer)
+    .resize(32, 32, { fit: 'cover' })
+    .png()
+    .toFile(join(projectRoot, 'public', 'favicon.png'))
+  console.log('Generated favicon.png')
+
+  // Generate splash screens (icon centered on themed background)
   for (const { width, height } of splashScreens) {
     const iconSize = Math.round(Math.min(width, height) * 0.3)
-    const resizedIcon = await sharp(svgBuffer)
-      .resize(iconSize, iconSize)
+    const resizedIcon = await sharp(sourceBuffer)
+      .resize(iconSize, iconSize, { fit: 'cover' })
       .png()
       .toBuffer()
 
