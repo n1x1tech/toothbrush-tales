@@ -32,7 +32,7 @@ const TTS_VOICES: TTSVoice[] = [
   { id: 'Joanna', name: 'Joanna', accent: 'American', description: 'Natural & friendly (Recommended)' },
   { id: 'Kevin', name: 'Kevin', accent: 'American', description: 'Natural & casual' },
   { id: 'Matthew', name: 'Matthew', accent: 'American', description: 'Natural & gentle' },
-  { id: 'Ivy', name: 'Ivy', accent: 'American', description: 'Studio quality' },
+  { id: 'Ivy', name: 'Ivy', accent: 'American', description: 'Expressive' },
   { id: 'Ruth', name: 'Ruth', accent: 'American', description: 'Expressive' },
   { id: 'Salli', name: 'Salli', accent: 'American', description: 'Friendly' },
   { id: 'Joey', name: 'Joey', accent: 'American', description: 'Casual' },
@@ -41,6 +41,8 @@ const TTS_VOICES: TTSVoice[] = [
   // Indian
   { id: 'Kajal', name: 'Kajal', accent: 'Indian', description: 'Warm' },
 ]
+
+const TTS_PREVIEW_TIMEOUT_MS = 35000
 
 export default function SettingsPage() {
   const {
@@ -84,7 +86,7 @@ export default function SettingsPage() {
         const timeout = setTimeout(() => {
           unsubscribe()
           reject(new Error('Voice preview timed out'))
-        }, 15000)
+        }, TTS_PREVIEW_TIMEOUT_MS)
 
         const unsubscribe = onSnapshot(doc(db, 'ttsRequests', docRef.id), (snap) => {
           const data = snap.data()

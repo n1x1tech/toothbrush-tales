@@ -35,6 +35,7 @@ const createFallbackStory = (): Story => ({
 
 const MIN_INTRO_DURATION = 5000 // Don't transition too fast
 const MAX_INTRO_DURATION = 25000 // Safety timeout
+const TTS_REQUEST_TIMEOUT_MS = 35000
 
 export default function StoryPage() {
   const location = useLocation()
@@ -111,7 +112,7 @@ export default function StoryPage() {
           console.warn('[TTS] Timed out waiting for audio')
           setTtsError('Voice narration timed out')
           resolve(null)
-        }, 15000) // 15s timeout
+        }, TTS_REQUEST_TIMEOUT_MS)
 
         const unsubscribe = onSnapshot(doc(db, 'ttsRequests', docRef.id), (snap) => {
           const data = snap.data()

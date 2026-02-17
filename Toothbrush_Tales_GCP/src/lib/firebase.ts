@@ -22,12 +22,29 @@ export const storage = getStorage(app)
 
 // Auto sign-in anonymously (equivalent to Cognito guest access)
 export async function ensureAuth() {
-  return new Promise((resolve) => {
-    onAuthStateChanged(auth, async (user) => {
-      if (!user) {
+  if (auth.currentUser) {
+    return auth.currentUser
+  }
+
+  return new Promise((resolve, reject) => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      try {
+        if (user) {
+          unsubscribe()
+          resolve(user)
+          return
+        }
+
         await signInAnonymously(auth)
+        unsubscribe()
+        resolve(auth.currentUser)
+      } catch (error) {
+        unsubscribe()
+        reject(error)
       }
-      resolve(auth.currentUser)
+    }, (error) => {
+      unsubscribe()
+      reject(error)
     })
   })
 }

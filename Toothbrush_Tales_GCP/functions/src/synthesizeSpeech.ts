@@ -3,24 +3,23 @@ import { TextToSpeechClient } from '@google-cloud/text-to-speech'
 
 const ttsClient = new TextToSpeechClient()
 
-// Voice mapping: keep Polly-style human names as keys for frontend compatibility
-// Journey voices are Google's most natural, conversational voices
-// Studio voices are premium quality; Neural2 as fallback options
+// Voice mapping: keep Polly-style human names as keys for frontend compatibility.
+// Prefer broadly-available Neural2 voices for better reliability.
 const VOICES: Record<string, { name: string; languageCode: string }> = {
   // Australian
-  Olivia:  { name: 'en-AU-Journey-D', languageCode: 'en-AU' },
+  Olivia:  { name: 'en-AU-Neural2-A', languageCode: 'en-AU' },
 
   // British
-  Amy:     { name: 'en-GB-Journey-D', languageCode: 'en-GB' },
-  Emma:    { name: 'en-GB-Journey-F', languageCode: 'en-GB' },
+  Amy:     { name: 'en-GB-Neural2-A', languageCode: 'en-GB' },
+  Emma:    { name: 'en-GB-Neural2-F', languageCode: 'en-GB' },
   Brian:   { name: 'en-GB-Neural2-B', languageCode: 'en-GB' },
   Arthur:  { name: 'en-GB-Neural2-D', languageCode: 'en-GB' },
 
   // American
-  Ivy:     { name: 'en-US-Studio-Q',  languageCode: 'en-US' },
-  Kevin:   { name: 'en-US-Journey-D', languageCode: 'en-US' },
-  Joanna:  { name: 'en-US-Journey-F', languageCode: 'en-US' },
-  Matthew: { name: 'en-US-Journey-O', languageCode: 'en-US' },
+  Ivy:     { name: 'en-US-Neural2-F', languageCode: 'en-US' },
+  Kevin:   { name: 'en-US-Neural2-I', languageCode: 'en-US' },
+  Joanna:  { name: 'en-US-Neural2-C', languageCode: 'en-US' },
+  Matthew: { name: 'en-US-Neural2-D', languageCode: 'en-US' },
   Ruth:    { name: 'en-US-Neural2-E', languageCode: 'en-US' },
   Salli:   { name: 'en-US-Neural2-F', languageCode: 'en-US' },
   Joey:    { name: 'en-US-Neural2-A', languageCode: 'en-US' },
@@ -31,6 +30,48 @@ const VOICES: Record<string, { name: string; languageCode: string }> = {
 }
 
 const DEFAULT_VOICE = VOICES['Joanna']
+
+type VoiceConfig = { name: string; languageCode: string }
+
+async function synthesizeWithRetry(
+  text: string,
+  voicesToTry: VoiceConfig[],
+): Promise<Uint8Array> {
+  let lastError: unknown
+
+  for (const voice of voicesToTry) {
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        const [response] = await ttsClient.synthesizeSpeech({
+          input: { ssml: textToSsml(text) },
+          voice: {
+            name: voice.name,
+            languageCode: voice.languageCode,
+          },
+          audioConfig: {
+            audioEncoding: 'MP3' as const,
+            sampleRateHertz: 24000,
+            speakingRate: 0.88,
+          },
+        })
+
+        if (!response.audioContent) {
+          throw new Error('No audio content returned')
+        }
+
+        return response.audioContent as Uint8Array
+      } catch (error) {
+        lastError = error
+        console.error(`[TTS] Voice ${voice.name} failed (attempt ${attempt}/2):`, error)
+        if (attempt < 2) {
+          await new Promise((resolve) => setTimeout(resolve, 300))
+        }
+      }
+    }
+  }
+
+  throw lastError ?? new Error('Failed to synthesize speech')
+}
 
 // Convert plain text to SSML with natural pauses
 function textToSsml(text: string): string {
@@ -71,27 +112,14 @@ export const onTTSRequest = functions
       console.log(`[TTS] Synthesizing with voice=${voiceId} (${voice.name}), text length: ${text.length}`)
 
       try {
-        const [response] = await ttsClient.synthesizeSpeech({
-          input: {
-            ssml: textToSsml(text),
-          },
-          voice: {
-            name: voice.name,
-            languageCode: voice.languageCode,
-          },
-          audioConfig: {
-            audioEncoding: 'MP3' as const,
-            sampleRateHertz: 24000,
-            speakingRate: 0.88,
-          },
-        })
-
-        if (!response.audioContent) {
-          throw new Error('No audio content returned')
-        }
-
-        const base64Audio = Buffer.from(response.audioContent as Uint8Array).toString('base64')
-        console.log(`[TTS] Success! Audio size: ${(response.audioContent as Uint8Array).length} bytes`)
+        const audioContent = await synthesizeWithRetry(text, [
+          voice,
+          DEFAULT_VOICE,
+          { name: 'en-US-Neural2-C', languageCode: 'en-US' },
+          { name: 'en-US-Standard-C', languageCode: 'en-US' },
+        ])
+        const base64Audio = Buffer.from(audioContent).toString('base64')
+        console.log(`[TTS] Success! Audio size: ${audioContent.length} bytes`)
 
         await snap.ref.update({
           audioData: `data:audio/mpeg;base64,${base64Audio}`,
@@ -99,30 +127,6 @@ export const onTTSRequest = functions
         })
       } catch (error) {
         console.error('[TTS] Synthesis error:', error)
-
-        // Fallback to default voice if a non-default voice failed
-        if (voiceId !== 'Joanna') {
-          console.log('[TTS] Retrying with default voice (Joanna)')
-          try {
-            const [fallbackResponse] = await ttsClient.synthesizeSpeech({
-              input: { ssml: textToSsml(text) },
-              voice: { name: DEFAULT_VOICE.name, languageCode: DEFAULT_VOICE.languageCode },
-              audioConfig: { audioEncoding: 'MP3' as const, sampleRateHertz: 24000, speakingRate: 0.88 },
-            })
-
-            if (fallbackResponse.audioContent) {
-              const base64Audio = Buffer.from(fallbackResponse.audioContent as Uint8Array).toString('base64')
-              await snap.ref.update({
-                audioData: `data:audio/mpeg;base64,${base64Audio}`,
-                status: 'complete',
-              })
-              return
-            }
-          } catch (fallbackError) {
-            console.error('[TTS] Fallback voice also failed:', fallbackError)
-          }
-        }
-
         await snap.ref.update({
           status: 'error',
           error: 'Failed to synthesize speech',
