@@ -6,6 +6,7 @@ import PlaybackControls from '../components/story/PlaybackControls'
 import type { Story } from '../hooks/useStoryGeneration'
 import { useAppStore } from '../store/useAppStore'
 import { db, ensureAuth } from '../lib/firebase'
+import { trackTelemetryEvent } from '../lib/telemetry'
 import { collection, addDoc, onSnapshot, doc } from 'firebase/firestore'
 import styles from './StoryPage.module.css'
 
@@ -61,11 +62,13 @@ export default function StoryPage() {
   const introAudioDoneRef = useRef(false)
   const introMinElapsedRef = useRef(false)
   const onQueueItemCompleteRef = useRef<(() => void) | null>(null)
+  const sessionIdRef = useRef(crypto.randomUUID())
 
   // TTS state
   const [isSpeaking, setIsSpeaking] = useState(false)
   const [isSynthesizing, setIsSynthesizing] = useState(false)
   const [ttsError, setTtsError] = useState<string | null>(null)
+  const [isTimerPaused, setIsTimerPaused] = useState(false)
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const audioQueueRef = useRef<{ text: string; voiceId: string }[]>([])
   const isProcessingQueueRef = useRef(false)
@@ -466,6 +469,14 @@ export default function StoryPage() {
   }
 
   const handleTimerComplete = () => {
+    setIsTimerPaused(true)
+    void trackTelemetryEvent('session_complete', {
+      sessionId: sessionIdRef.current,
+      phase: 'complete',
+      currentSegment,
+      autoPlay,
+      playbackMode,
+    })
     setPhase('complete')
   }
 
@@ -475,6 +486,19 @@ export default function StoryPage() {
   }
 
   const handlePlay = () => {
+    if (isTimerPaused) {
+      setIsTimerPaused(false)
+      void trackTelemetryEvent('session_resume', {
+        sessionId: sessionIdRef.current,
+        phase,
+        currentSegment,
+        autoPlay,
+        playbackMode,
+      })
+      resume()
+      return
+    }
+
     if (isSpeaking) {
       resume()
     } else {
@@ -483,10 +507,26 @@ export default function StoryPage() {
   }
 
   const handlePause = () => {
+    setIsTimerPaused(true)
+    void trackTelemetryEvent('session_pause', {
+      sessionId: sessionIdRef.current,
+      phase,
+      currentSegment,
+      autoPlay,
+      playbackMode,
+    })
     pause()
   }
 
   const handleStop = () => {
+    setIsTimerPaused(true)
+    void trackTelemetryEvent('session_stop', {
+      sessionId: sessionIdRef.current,
+      phase,
+      currentSegment,
+      autoPlay,
+      playbackMode,
+    })
     stop()
   }
 
@@ -502,9 +542,18 @@ export default function StoryPage() {
     // Reset intro tracking
     introAudioDoneRef.current = false
     introMinElapsedRef.current = false
+    sessionIdRef.current = crypto.randomUUID()
+    setIsTimerPaused(false)
 
     // Move to intro phase IMMEDIATELY (synchronously)
     setPhase('intro')
+    void trackTelemetryEvent('session_start', {
+      sessionId: sessionIdRef.current,
+      phase: 'intro',
+      currentSegment: 0,
+      autoPlay,
+      playbackMode,
+    })
 
     // Check if audio should be played
     const shouldPlayAudio = autoPlay && (playbackMode === 'audio' || playbackMode === 'both')
@@ -591,7 +640,7 @@ export default function StoryPage() {
       )}
       <PlaybackControls
         isPlaying={isSpeaking}
-        isPaused={false}
+        isPaused={isTimerPaused}
         isSynthesizing={isSynthesizing}
         onPlay={handlePlay}
         onPause={handlePause}
@@ -608,7 +657,7 @@ export default function StoryPage() {
           duration={120}
           onSegmentChange={handleSegmentChange}
           onComplete={handleTimerComplete}
-          isPaused={false}
+          isPaused={isTimerPaused}
         />
       )}
 

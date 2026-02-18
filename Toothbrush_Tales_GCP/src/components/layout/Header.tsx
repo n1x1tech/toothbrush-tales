@@ -33,6 +33,12 @@ export default function Header() {
           >
             Voice
           </Link>
+          <Link
+            to="/telemetry"
+            className={`${styles.navLink} ${isActive('/telemetry') ? styles.active : ''}`}
+          >
+            Stats
+          </Link>
         </nav>
       </header>
 
@@ -57,6 +63,13 @@ export default function Header() {
         >
           <span className={styles.bottomNavIcon}>{'\uD83D\uDD0A'}</span>
           <span className={styles.bottomNavLabel}>Voice</span>
+        </Link>
+        <Link
+          to="/telemetry"
+          className={`${styles.bottomNavLink} ${isActive('/telemetry') ? styles.active : ''}`}
+        >
+          <span className={styles.bottomNavIcon}>{'\uD83D\uDCCA'}</span>
+          <span className={styles.bottomNavLabel}>Stats</span>
         </Link>
       </nav>
     </>

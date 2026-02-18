@@ -4,6 +4,7 @@ import HomePage from './pages/HomePage'
 import StoryPage from './pages/StoryPage'
 import HistoryPage from './pages/HistoryPage'
 import SettingsPage from './pages/SettingsPage'
+import TelemetryPage from './pages/TelemetryPage'
 
 function App() {
   return (
@@ -14,6 +15,7 @@ function App() {
           <Route path="story" element={<StoryPage />} />
           <Route path="history" element={<HistoryPage />} />
           <Route path="settings" element={<SettingsPage />} />
+          <Route path="telemetry" element={<TelemetryPage />} />
         </Route>
       </Routes>
     </BrowserRouter>

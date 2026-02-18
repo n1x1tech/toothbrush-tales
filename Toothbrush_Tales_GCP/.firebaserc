@@ -1,5 +1,6 @@
 {
   "projects": {
+    "default": "toothbrush-tales",
     "testing": "toothbrush-tales"
   },
   "targets": {},

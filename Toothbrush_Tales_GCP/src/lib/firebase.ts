@@ -4,20 +4,28 @@ import { getFirestore } from 'firebase/firestore'
 import { getFunctions } from 'firebase/functions'
 import { getStorage } from 'firebase/storage'
 
+function requireEnv(name: keyof ImportMetaEnv): string {
+  const value = import.meta.env[name]
+  if (!value) {
+    throw new Error(`Missing required environment variable: ${name}`)
+  }
+  return value
+}
+
 const firebaseConfig = {
-  apiKey: "AIzaSyCZxQW-_Hq-QBU58FsnFVBJHwTT0_Tc5s8",
-  authDomain: "toothbrush-tales.firebaseapp.com",
-  projectId: "toothbrush-tales",
-  storageBucket: "toothbrush-tales.firebasestorage.app",
-  messagingSenderId: "836626453942",
-  appId: "1:836626453942:web:7389883b4ae467456add17",
-  measurementId: "G-REW6043P3F"
+  apiKey: requireEnv('VITE_FIREBASE_API_KEY'),
+  authDomain: requireEnv('VITE_FIREBASE_AUTH_DOMAIN'),
+  projectId: requireEnv('VITE_FIREBASE_PROJECT_ID'),
+  storageBucket: requireEnv('VITE_FIREBASE_STORAGE_BUCKET'),
+  messagingSenderId: requireEnv('VITE_FIREBASE_MESSAGING_SENDER_ID'),
+  appId: requireEnv('VITE_FIREBASE_APP_ID'),
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID,
 }
 
 const app = initializeApp(firebaseConfig)
 export const auth = getAuth(app)
 export const db = getFirestore(app)
-export const functions = getFunctions(app, 'us-central1')
+export const functions = getFunctions(app, import.meta.env.VITE_FIREBASE_FUNCTIONS_REGION || 'us-central1')
 export const storage = getStorage(app)
 
 // Auto sign-in anonymously (equivalent to Cognito guest access)

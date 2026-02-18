@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useRef } from 'react'
 import styles from './BrushTimer.module.css'
 
 interface BrushTimerProps {
@@ -21,18 +22,38 @@ export default function BrushTimer({
   onComplete,
   isPaused
 }: BrushTimerProps) {
-  const [timeRemaining, setTimeRemaining] = useState(duration)
-  const [isRunning, setIsRunning] = useState(false)
+  const [remainingMs, setRemainingMs] = useState(duration * 1000)
+  const rafRef = useRef<number | null>(null)
+  const endTimeRef = useRef<number | null>(null)
+  const remainingMsRef = useRef(duration * 1000)
+  const hasCompletedRef = useRef(false)
+
+  const clearRaf = () => {
+    if (rafRef.current !== null) {
+      cancelAnimationFrame(rafRef.current)
+      rafRef.current = null
+    }
+  }
+
+  const persistRemainingFromEndTime = () => {
+    if (endTimeRef.current === null) return
+    const nextRemaining = Math.max(0, endTimeRef.current - performance.now())
+    remainingMsRef.current = nextRemaining
+    setRemainingMs(nextRemaining)
+    endTimeRef.current = null
+  }
 
   // Calculate current segment (0-3 for 4 segments)
   const segmentDuration = duration / 4
+  const elapsedSeconds = Math.max(0, duration - remainingMs / 1000)
   const currentSegment = Math.min(
     3,
-    Math.floor((duration - timeRemaining) / segmentDuration)
+    Math.floor(elapsedSeconds / segmentDuration)
   )
 
   // Calculate progress (0 to 1)
-  const progress = (duration - timeRemaining) / duration
+  const progress = Math.min(1, Math.max(0, elapsedSeconds / duration))
+  const timeRemaining = Math.max(0, Math.ceil(remainingMs / 1000))
 
   // Format time as M:SS
   const formatTime = (seconds: number) => {
@@ -55,33 +76,55 @@ export default function BrushTimer({
     return '#F0C040'
   }
 
-  // Start timer on mount
+  // Reset timer state when duration changes
   useEffect(() => {
-    setIsRunning(true)
-  }, [])
+    const initialMs = duration * 1000
+    clearRaf()
+    endTimeRef.current = null
+    hasCompletedRef.current = false
+    remainingMsRef.current = initialMs
+    setRemainingMs(initialMs)
+  }, [duration])
 
-  // Timer countdown logic
+  // Monotonic timer loop to avoid setInterval drift
   useEffect(() => {
-    if (!isRunning || isPaused || timeRemaining <= 0) return
+    if (hasCompletedRef.current || remainingMsRef.current <= 0) return
 
-    const interval = setInterval(() => {
-      setTimeRemaining((prev) => {
-        if (prev <= 1) {
-          clearInterval(interval)
-          onComplete()
-          return 0
-        }
-        return prev - 1
-      })
-    }, 1000)
+    if (isPaused) {
+      clearRaf()
+      persistRemainingFromEndTime()
+      return
+    }
 
-    return () => clearInterval(interval)
-  }, [isRunning, isPaused, timeRemaining, onComplete])
+    endTimeRef.current = performance.now() + remainingMsRef.current
+
+    const tick = () => {
+      if (endTimeRef.current === null) return
+
+      const nextRemaining = Math.max(0, endTimeRef.current - performance.now())
+      remainingMsRef.current = nextRemaining
+      setRemainingMs(nextRemaining)
+
+      if (nextRemaining <= 0) {
+        hasCompletedRef.current = true
+        clearRaf()
+        onComplete()
+        return
+      }
+
+      rafRef.current = requestAnimationFrame(tick)
+    }
+
+    rafRef.current = requestAnimationFrame(tick)
+
+    return clearRaf
+  }, [isPaused, onComplete])
 
   // Notify parent of segment changes
   useEffect(() => {
+    if (timeRemaining <= 0) return
     onSegmentChange(currentSegment)
-  }, [currentSegment, onSegmentChange])
+  }, [currentSegment, onSegmentChange, timeRemaining])
 
   return (
     <div className={styles.container}>

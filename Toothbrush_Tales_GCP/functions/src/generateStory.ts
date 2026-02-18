@@ -1,7 +1,13 @@
 import * as functions from 'firebase-functions/v1'
 import { VertexAI } from '@google-cloud/vertexai'
 
-const vertexAI = new VertexAI({ project: 'toothbrush-tales', location: 'us-central1' })
+const vertexProject = process.env.VERTEX_PROJECT_ID || process.env.GCLOUD_PROJECT
+if (!vertexProject) {
+  throw new Error('Missing VERTEX_PROJECT_ID/GCLOUD_PROJECT for Vertex AI initialization')
+}
+
+const vertexLocation = process.env.VERTEX_LOCATION || 'us-central1'
+const vertexAI = new VertexAI({ project: vertexProject, location: vertexLocation })
 const geminiModel = vertexAI.getGenerativeModel({ model: 'gemini-2.0-flash' })
 
 // Dynamic fallback story templates that actually use the theme (~200 words each)

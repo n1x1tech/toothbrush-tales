@@ -17,8 +17,11 @@ vite.config.d.ts
 
 # Environment
 .env
+.env.*
 .env.local
 .env.*.local
+!.env.example
+!functions/.env.example
 
 # OS
 .DS_Store
