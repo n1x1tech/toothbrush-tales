@@ -1,5 +1,6 @@
 import * as functions from 'firebase-functions/v1'
 import { VertexAI } from '@google-cloud/vertexai'
+import { buildStoryPrompts, STORY_PROMPT_VERSION } from './storyPrompts'
 
 const vertexProject = process.env.VERTEX_PROJECT_ID || process.env.GCLOUD_PROJECT
 if (!vertexProject) {
@@ -152,93 +153,9 @@ export const onStoryRequest = functions
         return
       }
 
-      // Detect if multiple names are provided
-      const nameList = characterName
-        .split(/,\s*|\s+and\s+|\s+&\s+/)
-        .map((n: string) => n.trim())
-        .filter((n: string) => n.length > 0)
-      const isMultipleCharacters = nameList.length > 1
-      const characterGuidance = isMultipleCharacters
-        ? `MULTIPLE CHARACTERS: The story stars ${nameList.length} characters: ${nameList.join(', ')}. EVERY character must appear by name in EVERY segment. Give each character distinct actions and dialogue. They work as a team. Use each character's name at least once per segment.`
-        : `Use the character's name frequently (at least 2-3 times per segment).`
+      const { systemPrompt, userPrompt } = buildStoryPrompts({ characterName, theme })
 
-      const systemPrompt = `You are an award-winning children's storyteller creating engaging 2-minute adventure stories for 6-10 year olds. Your stories are designed to be read aloud during toothbrushing time.
-
-CRITICAL STORY REQUIREMENTS:
-1. Create ONE coherent story with a clear narrative arc (beginning \u2192 problem/adventure \u2192 resolution \u2192 celebration)
-2. The ENTIRE story must be driven by the specific theme/scenario provided - it's not just background, it IS the plot
-3. The SAME characters, setting, and adventure must continue throughout ALL segments
-4. Each segment must END with a mini-cliffhanger or transition that connects to the next segment
-5. ${characterGuidance}
-6. Total story should take exactly 2 minutes when read at a child-friendly pace
-
-WRITING STYLE:
-- Write for 6-10 year olds: use engaging vocabulary, some mild suspense, and clever humor
-- Include 2-3 sound effects per segment (WHOOOOSH! SPLISH SPLASH! CRASH! ZOOM! POP! SPARKLE!)
-- Add humor, unexpected twists, and exciting moments appropriate for elementary school kids
-- Use varied sentence structure - mix short punchy sentences with longer descriptive ones
-- Include dialogue that sounds natural for the characters
-- Reference teeth/brushing naturally 1-2 times per segment (sparkly teeth, bright smile, clean and shiny)
-- Make it feel like a real adventure with stakes and challenges
-
-STORY STRUCTURE:
-- Intro (5 seconds, ~15 words): Short exciting hook that introduces ${isMultipleCharacters ? 'all characters by name' : 'the character'} and the adventure
-- Segment 1 (25 seconds, ~40-50 words): Set the scene directly in the theme's world/scenario
-- Segment 2 (25 seconds, ~40-50 words): The adventure deepens, introduce a challenge
-- Segment 3 (25 seconds, ~40-50 words): Climax - the most exciting moment
-- Segment 4 (25 seconds, ~40-50 words): Resolution - how the adventure concludes
-- Conclusion (5 seconds, ~15 words): Celebrate success, connect to clean teeth
-
-CRITICAL LENGTH CONSTRAINT:
-- The TOTAL story (intro + all 4 segments + conclusion) must be under 210 words
-- Keep it punchy and fast-paced - every word counts
-- Do NOT pad segments with filler or repetition`
-
-      const characterDescription = isMultipleCharacters
-        ? `${nameList.join(', ')} who are`
-        : `"${characterName}" who is`
-      const nameInstruction = isMultipleCharacters
-        ? `Mention EACH character (${nameList.join(', ')}) by name in every segment - give them each distinct actions`
-        : `Mention ${characterName} by name 2-3 times per segment`
-
-      const userPrompt = `Create a toothbrushing adventure story about ${characterDescription} ${theme}.
-
-THE THEME "${theme}" IS THE PLOT: This isn't just a detail - the ENTIRE story must be about ${characterName} experiencing this specific scenario. Every segment should advance this particular adventure, not a generic one.
-
-IMPORTANT: Write a SINGLE CONTINUOUS STORY where each segment flows into the next. The story should feel like one complete adventure about "${theme}", not four separate mini-stories or a generic adventure.
-
-Respond with ONLY valid JSON (no other text, no markdown code blocks):
-{
-  "intro": "A short exciting hook (10-15 words) about ${characterName} starting their ${theme} adventure",
-  "segments": [
-    "First paragraph (40-50 words) - ${characterName} begins the ${theme} adventure",
-    "Second paragraph (40-50 words) - the ${theme} adventure continues with a challenge",
-    "Third paragraph (40-50 words) - the exciting climax of the ${theme} adventure",
-    "Fourth paragraph (40-50 words) - ${characterName} succeeds in the ${theme} adventure"
-  ],
-  "brushingPrompts": [
-    "Now brush your bottom teeth nice and clean!",
-    "Great job! Now brush your top teeth!",
-    "You're doing amazing! Brush the left side!",
-    "Almost done! Brush the right side!"
-  ],
-  "conclusion": "A short celebratory ending (10-15 words) connecting ${theme} success to sparkling teeth"
-}
-
-CRITICAL RULES:
-- EVERY segment must directly involve the "${theme}" scenario - this is the heart of the story
-- Each segment must contain ONLY the story text - NO labels like "Segment 1", NO word counts, NO formatting instructions
-- Each segment MUST be 40-50 words of pure story (NOT more!)
-- The TOTAL story must be under 210 words including intro and conclusion
-- Story must be COHERENT - same characters, same "${theme}" adventure throughout all 4 segments
-- Include fun sound effects in EVERY segment (WHOOSH! SPLASH! ZOOM! CRASH! SPARKLE!)
-- ${nameInstruction}
-- Write for 6-10 year olds: clever, exciting, with some suspense and humor
-- NO truly scary content, but mild suspense and challenges are good
-- The intro should be exciting and mention putting the toothbrush in their mouth
-- The conclusion should celebrate both the ${theme} adventure ending AND their clean sparkly teeth`
-
-      console.log(`[Story] Generating story for character="${characterName}", theme="${theme}"`)
+      console.log(`[Story] Generating story for character="${characterName}", theme="${theme}", promptVersion="${STORY_PROMPT_VERSION}"`)
 
       try {
         const textContent = await invokeVertexWithRetry(systemPrompt, userPrompt, 2)
