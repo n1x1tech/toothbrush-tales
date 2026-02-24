@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+﻿import { useState, useEffect } from 'react'
 import { useRef } from 'react'
 import styles from './BrushTimer.module.css'
 
@@ -70,7 +70,7 @@ export default function BrushTimer({
   const circumference = 2 * Math.PI * radius
   const strokeDashoffset = circumference * (1 - progress)
 
-  // Ring color transitions: teal → green → gold
+  // Ring color transitions: teal -> green -> gold
   const getRingColor = () => {
     if (progress < 0.33) return 'var(--color-secondary)'
     if (progress < 0.66) return 'var(--color-success)'
@@ -105,7 +105,7 @@ export default function BrushTimer({
 
       const nextRemaining = Math.max(0, endTimeRef.current - performance.now())
       remainingMsRef.current = nextRemaining
-      // Paint at ~30 FPS to keep the ring smooth without over-rendering.
+      // Paint at ~30 FPS to keep the ring smooth without over-rendering
       if (nextRemaining === 0 || Math.abs(nextRemaining - lastPaintedRemainingMsRef.current) >= 33) {
         lastPaintedRemainingMsRef.current = nextRemaining
         setRemainingMs(nextRemaining)
@@ -190,3 +190,4 @@ export default function BrushTimer({
     </div>
   )
 }
+

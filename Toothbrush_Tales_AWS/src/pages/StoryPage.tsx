@@ -1,13 +1,13 @@
-import { useLocation, useNavigate } from 'react-router-dom'
+﻿import { useLocation, useNavigate } from 'react-router-dom'
 import { useState, useEffect, useCallback, useRef } from 'react'
+import type { Schema } from '../../amplify/data/resource'
 import BrushTimer from '../components/timer/BrushTimer'
 import StoryPlayer from '../components/story/StoryPlayer'
 import PlaybackControls from '../components/story/PlaybackControls'
 import type { Story } from '../hooks/useStoryGeneration'
 import { useAppStore } from '../store/useAppStore'
-import { db, ensureAuth } from '../lib/firebase'
 import { trackTelemetryEvent } from '../lib/telemetry'
-import { collection, addDoc, onSnapshot, doc } from 'firebase/firestore'
+import { getAmplifyDataClient } from '../services/amplifyClient'
 import styles from './StoryPage.module.css'
 
 // Fallback story if none provided (e.g., direct navigation to /story)
@@ -17,16 +17,16 @@ const createFallbackStory = (): Story => ({
   theme: 'going on an adventure',
   intro: "This story is about Alex going on an adventure. Get ready to brush, here we go!",
   segments: [
-    "Once upon a time, Alex woke up feeling super excited! Today was the day for a big adventure. Alex jumped out of bed and did a silly dance, wiggling and giggling.",
-    "Alex found a magical toothbrush that could talk! \"Hello friend!\" said the toothbrush. \"Let's make your teeth sparkle like stars!\" Then they raced off on their journey together.",
-    "Along the way, Alex met a friendly dragon who loved clean teeth! The dragon showed them how to brush in circles. \"Round and round, up and down!\" they sang together.",
-    "Finally, Alex reached the end of the adventure with the shiniest, cleanest teeth ever! The magical toothbrush did a happy wiggle. \"You did it!\" cheered everyone."
+    "Once upon a time, Alex woke up feeling super excited! Today was the day for a big adventure. WHOOOOSH! Alex jumped out of bed and did a silly dance, wiggling and giggling!",
+    "Alex found a magical toothbrush that could talk! \"Hello friend!\" said the toothbrush. \"Let's make your teeth sparkle like stars!\" And they zoomed off on their journey together. ZOOM ZOOM!",
+    "Along the way, Alex met a friendly dragon who loved clean teeth! The dragon showed them how to brush in circles. \"Round and round, up and down!\" they sang together. SPLISH SPLASH!",
+    "Finally, Alex reached the end of the adventure with the shiniest, cleanest teeth ever! The magical toothbrush did a happy wiggle. \"You did it!\" cheered everyone. HOORAY!"
   ],
   brushingPrompts: [
-    "Great start! Now brush your bottom teeth in gentle circles.",
-    "You're doing awesome! Let's brush your top teeth next.",
-    "Nice work so far. Now brush the left side.",
-    "Almost there! Finish strong by brushing the right side."
+    "Now brush your bottom teeth!",
+    "Time to brush the top teeth!",
+    "Brush the teeth on your left side!",
+    "Brush the teeth on your right side!"
   ],
   conclusion: "Hooray! Your teeth are super clean and sparkly! Great job brushing! You're a toothbrushing champion!",
   audioUrl: null,
@@ -64,12 +64,14 @@ export default function StoryPage() {
   const onQueueItemCompleteRef = useRef<(() => void) | null>(null)
   const sessionIdRef = useRef(crypto.randomUUID())
 
-  // TTS state
+  // Polly TTS state
   const [isSpeaking, setIsSpeaking] = useState(false)
   const [isSynthesizing, setIsSynthesizing] = useState(false)
   const [ttsError, setTtsError] = useState<string | null>(null)
+  const [backgroundPauseNotice, setBackgroundPauseNotice] = useState<string | null>(null)
   const [isTimerPaused, setIsTimerPaused] = useState(false)
   const audioRef = useRef<HTMLAudioElement | null>(null)
+  const amplifyClientRef = useRef<any>(null)
   const audioQueueRef = useRef<{ text: string; voiceId: string }[]>([])
   const isProcessingQueueRef = useRef(false)
 
@@ -90,51 +92,36 @@ export default function StoryPage() {
     }
   }, [])
 
-  // Synthesize text to audio URL using Firestore-triggered Cloud Function
+  // Synthesize text to audio URL
   const synthesize = useCallback(async (text: string, voiceIdToUse: string): Promise<string | null> => {
     console.log('[TTS] synthesize called for voice:', voiceIdToUse)
     setIsSynthesizing(true)
-    setTtsError(null)
+    setTtsError(null) // Clear previous errors
     try {
-      await ensureAuth()
+      if (!amplifyClientRef.current) {
+        amplifyClientRef.current = await getAmplifyDataClient<Schema>()
+      }
 
-      // Write TTS request to Firestore - triggers the Cloud Function
-      const docRef = await addDoc(collection(db, 'ttsRequests'), {
-        text,
-        voiceId: voiceIdToUse,
-        status: 'pending',
-        createdAt: new Date(),
-      })
+      const result = await Promise.race([
+        amplifyClientRef.current.queries.synthesizeSpeech({
+          text,
+          voiceId: voiceIdToUse,
+        }),
+        new Promise<never>((_, reject) => {
+          setTimeout(() => reject(new Error('Voice narration timed out')), TTS_REQUEST_TIMEOUT_MS)
+        }),
+      ])
 
-      console.log('[TTS] Request written to Firestore:', docRef.id)
+      console.log('[TTS] synthesize result:', { hasErrors: !!result.errors, hasData: !!result.data, dataLength: result.data?.length })
 
-      // Wait for the function to process and write back the audio data
-      return await new Promise<string | null>((resolve) => {
-        const timeout = setTimeout(() => {
-          unsubscribe()
-          console.warn('[TTS] Timed out waiting for audio')
-          setTtsError('Voice narration timed out')
-          resolve(null)
-        }, TTS_REQUEST_TIMEOUT_MS)
+      if (result.errors || !result.data) {
+        console.error('[TTS] Synthesis error:', result.errors)
+        const errorMsg = result.errors?.[0]?.message || 'Voice narration unavailable'
+        setTtsError(errorMsg)
+        return null
+      }
 
-        const unsubscribe = onSnapshot(doc(db, 'ttsRequests', docRef.id), (snap) => {
-          const data = snap.data()
-          if (!data) return
-
-          if (data.status === 'complete' && data.audioData) {
-            clearTimeout(timeout)
-            unsubscribe()
-            console.log('[TTS] Audio received from Firestore, data length:', data.audioData.length)
-            resolve(data.audioData)
-          } else if (data.status === 'error') {
-            clearTimeout(timeout)
-            unsubscribe()
-            console.error('[TTS] Function returned error:', data.error)
-            setTtsError('Voice narration unavailable')
-            resolve(null)
-          }
-        })
-      })
+      return result.data
     } catch (error) {
       console.error('[TTS] Synthesis exception:', error)
       setTtsError('Voice narration unavailable - please check your connection')
@@ -387,13 +374,13 @@ export default function StoryPage() {
       }
     }
 
-    // Min duration timer — don't transition too fast
+    // Min duration timer - don't transition too fast
     const minTimer = setTimeout(() => {
       introMinElapsedRef.current = true
       tryTransition()
     }, MIN_INTRO_DURATION)
 
-    // Max duration timer — safety net
+    // Max duration timer - safety net
     const maxTimer = setTimeout(() => {
       console.warn('[TTS] Max intro duration reached, forcing transition')
       setPhase('brushing')
@@ -462,6 +449,42 @@ export default function StoryPage() {
     }
   }, [])
 
+  // Auto-pause session when the app is backgrounded for more than 5 seconds
+  useEffect(() => {
+    let hiddenAt: number | null = null
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        hiddenAt = Date.now()
+        return
+      }
+
+      if (hiddenAt === null) return
+      const hiddenDurationMs = Date.now() - hiddenAt
+      hiddenAt = null
+
+      if (phase !== 'brushing') return
+      if (hiddenDurationMs < 5000) return
+
+      setIsTimerPaused(true)
+      pause()
+      setBackgroundPauseNotice('Paused because the app was in the background. Tap Play to continue.')
+      trackTelemetryEvent('session_pause', {
+        sessionId: sessionIdRef.current,
+        phase,
+        currentSegment,
+        autoPlay,
+        playbackMode,
+        reason: 'background_timeout',
+      })
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
+  }, [phase, pause, currentSegment, autoPlay, playbackMode])
+
   const handleSegmentChange = (segment: number) => {
     if (phase === 'brushing') {
       setCurrentSegment(segment)
@@ -470,7 +493,7 @@ export default function StoryPage() {
 
   const handleTimerComplete = () => {
     setIsTimerPaused(true)
-    void trackTelemetryEvent('session_complete', {
+    trackTelemetryEvent('session_complete', {
       sessionId: sessionIdRef.current,
       phase: 'complete',
       currentSegment,
@@ -488,7 +511,8 @@ export default function StoryPage() {
   const handlePlay = () => {
     if (isTimerPaused) {
       setIsTimerPaused(false)
-      void trackTelemetryEvent('session_resume', {
+      setBackgroundPauseNotice(null)
+      trackTelemetryEvent('session_resume', {
         sessionId: sessionIdRef.current,
         phase,
         currentSegment,
@@ -508,7 +532,8 @@ export default function StoryPage() {
 
   const handlePause = () => {
     setIsTimerPaused(true)
-    void trackTelemetryEvent('session_pause', {
+    setBackgroundPauseNotice(null)
+    trackTelemetryEvent('session_pause', {
       sessionId: sessionIdRef.current,
       phase,
       currentSegment,
@@ -520,7 +545,8 @@ export default function StoryPage() {
 
   const handleStop = () => {
     setIsTimerPaused(true)
-    void trackTelemetryEvent('session_stop', {
+    setBackgroundPauseNotice(null)
+    trackTelemetryEvent('session_stop', {
       sessionId: sessionIdRef.current,
       phase,
       currentSegment,
@@ -544,10 +570,11 @@ export default function StoryPage() {
     introMinElapsedRef.current = false
     sessionIdRef.current = crypto.randomUUID()
     setIsTimerPaused(false)
+    setBackgroundPauseNotice(null)
 
     // Move to intro phase IMMEDIATELY (synchronously)
     setPhase('intro')
-    void trackTelemetryEvent('session_start', {
+    trackTelemetryEvent('session_start', {
       sessionId: sessionIdRef.current,
       phase: 'intro',
       currentSegment: 0,
@@ -564,9 +591,12 @@ export default function StoryPage() {
       audioUnlocked.current = true
 
       // Unlock audio context from user gesture by playing a tiny silent sound
+      // This ensures subsequent queue-driven playback works on iOS/mobile
       try {
         const audio = audioRef.current
         if (audio) {
+          // Create a minimal silent audio to unlock the audio element
+          // This is a tiny valid MP3 frame (silence)
           audio.src = 'data:audio/mp3;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4Ljc2LjEwMAAAAAAAAAAAAAAA//tQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWGluZwAAAA8AAAACAAABhgC7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7//////////////////////////////////////////////////////////////////8AAAAATGF2YzU4LjEzAAAAAAAAAAAAAAAAJAAAAAAAAAAAAYYoRwSHAAAAAAAAAAAAAAAAAAAA//tQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWGluZwAAAA8AAAACAAABhgC7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7//////////////////////////////////////////////////////////////////8AAAAATGF2YzU4LjEzAAAAAAAAAAAAAAAAJAAAAAAAAAAAAYYoRwSHAAAAAAAAAAAAAAAAAAAA'
           await audio.play()
           audio.pause()
@@ -577,7 +607,7 @@ export default function StoryPage() {
         console.warn('[TTS] Audio unlock failed (may still work):', e)
       }
 
-      // Set completion callback — when intro audio finishes, mark it done
+      // Set completion callback - when intro audio finishes, mark it done
       onQueueItemCompleteRef.current = () => {
         console.log('[TTS] Intro audio finished')
         introAudioDoneRef.current = true
@@ -633,6 +663,11 @@ export default function StoryPage() {
           <button onClick={() => setTtsError(null)} className={styles.dismissError}>×</button>
         </div>
       )}
+      {backgroundPauseNotice && (
+        <div className={styles.pauseNotice} role="status" aria-live="polite">
+          {backgroundPauseNotice}
+        </div>
+      )}
       {story.isFallback && (
         <div className={styles.fallbackNotice}>
           <span>Using a built-in story (AI generation was unavailable). Try again later for a custom story!</span>
@@ -684,3 +719,7 @@ export default function StoryPage() {
     </div>
   )
 }
+
+
+
+

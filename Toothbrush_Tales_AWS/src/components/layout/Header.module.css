@@ -1,0 +1,130 @@
+﻿.header {
+  background: var(--color-white);
+  padding: 0.75rem 1.5rem;
+  box-shadow: var(--shadow-soft);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  text-decoration: none;
+  color: var(--color-text);
+}
+
+.logoIcon {
+  font-size: 1.75rem;
+}
+
+.logoText {
+  font-size: 1.3rem;
+  font-weight: 800;
+  background: linear-gradient(135deg, var(--color-primary), var(--color-secondary));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.desktopNav {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.navLink {
+  padding: 0.5rem 0.75rem;
+  border-radius: 8px;
+  text-decoration: none;
+  color: var(--color-text-light);
+  font-weight: 600;
+  font-size: 0.9rem;
+  transition: all 0.2s;
+}
+
+.navLink:hover {
+  background: #f0f0f0;
+  color: var(--color-text);
+}
+
+.navLink.active {
+  background: var(--color-secondary);
+  color: white;
+}
+
+.bottomNav {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .header {
+    padding: 0.5rem 1rem;
+  }
+
+  .logoText {
+    display: none;
+  }
+
+  .logoIcon {
+    font-size: 1.5rem;
+  }
+
+  .desktopNav {
+    display: none;
+  }
+
+  .bottomNav {
+    display: flex;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: var(--color-white);
+    box-shadow: 0 -2px 12px rgba(0, 0, 0, 0.08);
+    z-index: 100;
+    justify-content: space-around;
+    padding: 0.25rem 0;
+    padding-bottom: env(safe-area-inset-bottom, 0.25rem);
+  }
+
+  .bottomNavLink {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-decoration: none;
+    color: var(--color-text-light);
+    font-weight: 600;
+    height: 56px;
+    min-width: 64px;
+    padding: 0.25rem 0.75rem;
+    border-radius: 12px;
+    transition: all 0.2s;
+  }
+
+  .bottomNavLink.active {
+    color: var(--color-secondary);
+  }
+
+  .bottomNavIcon {
+    font-size: 1.5rem;
+    line-height: 1;
+  }
+
+  .bottomNavLabel {
+    font-size: 0.7rem;
+    margin-top: 0.15rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .navLink,
+  .bottomNavLink {
+    transition: none;
+  }
+}
+
