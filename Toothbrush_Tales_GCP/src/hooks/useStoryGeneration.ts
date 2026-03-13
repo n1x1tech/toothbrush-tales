@@ -59,8 +59,8 @@ export function useStoryGeneration() {
   const [isGenerating, setIsGenerating] = useState(false)
   const [error, setError] = useState<Error | null>(null)
 
-  const generateStory = useCallback(async (characterName: string, theme: string): Promise<Story> => {
-    console.log(`[StoryGen] Generating story for character="${characterName}", theme="${theme}"`)
+  const generateStory = useCallback(async (characterName: string, theme: string, ageRange?: string): Promise<Story> => {
+    console.log(`[StoryGen] Generating story for character="${characterName}", theme="${theme}", ageRange="${ageRange || '5-10'}"`)
     setIsGenerating(true)
     setError(null)
 
@@ -73,6 +73,7 @@ export function useStoryGeneration() {
         const docRef = await addDoc(collection(db, 'storyRequests'), {
           characterName,
           theme,
+          ageRange: ageRange || '5-10',
           status: 'pending',
           createdAt: new Date(),
         })

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import CharacterInput from '../components/input/CharacterInput'
 import ThemeInput from '../components/input/ThemeInput'
 import { useStoryGeneration } from '../hooks/useStoryGeneration'
+import { useAppStore } from '../store/useAppStore'
 import { ensureAuth } from '../lib/firebase'
 import styles from './HomePage.module.css'
 
@@ -12,6 +13,7 @@ export default function HomePage() {
   const [theme, setTheme] = useState('')
   const [generationError, setGenerationError] = useState<string | null>(null)
   const { generateStory, isGenerating } = useStoryGeneration()
+  const ageRange = useAppStore((s) => s.ageRange)
 
   // Warm anonymous auth early so first story request is less likely to stall.
   useEffect(() => {
@@ -25,7 +27,7 @@ export default function HomePage() {
     setGenerationError(null)
 
     try {
-      const story = await generateStory(characterName.trim(), theme.trim())
+      const story = await generateStory(characterName.trim(), theme.trim(), ageRange)
       // Navigate to story page, passing fallback warning if applicable
       navigate('/story', { state: { story, wasFallback: story.isFallback } })
     } catch (err) {

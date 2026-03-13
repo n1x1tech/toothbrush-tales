@@ -3,12 +3,14 @@ import { persist } from 'zustand/middleware'
 import type { Story } from '../hooks/useStoryGeneration'
 
 export type PlaybackMode = 'audio' | 'text' | 'both'
+export type AgeRange = '2-5' | '5-10' | '10-15'
 
 interface AppState {
   // Playback settings
   playbackMode: PlaybackMode
   voiceId: string
   autoPlay: boolean
+  ageRange: AgeRange
 
   // Current story
   currentStory: Story | null
@@ -23,6 +25,7 @@ interface AppState {
   setPlaybackMode: (mode: PlaybackMode) => void
   setVoiceId: (voiceId: string) => void
   setAutoPlay: (autoPlay: boolean) => void
+  setAgeRange: (ageRange: AgeRange) => void
   setCurrentStory: (story: Story | null) => void
   addToHistory: (story: Story) => void
   toggleFavorite: (storyId: string) => void
@@ -37,6 +40,7 @@ export const useAppStore = create<AppState>()(
       playbackMode: 'both',
       voiceId: 'Joanna', // Maps to en-US-Journey-F on Google Cloud TTS (natural voice)
       autoPlay: true,
+      ageRange: '5-10',
 
       // Current story
       currentStory: null,
@@ -53,6 +57,8 @@ export const useAppStore = create<AppState>()(
       setVoiceId: (voiceId) => set({ voiceId }),
 
       setAutoPlay: (autoPlay) => set({ autoPlay }),
+
+      setAgeRange: (ageRange) => set({ ageRange }),
 
       setCurrentStory: (story) => set({ currentStory: story }),
 

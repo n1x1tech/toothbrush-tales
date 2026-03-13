@@ -1,6 +1,6 @@
 import * as functions from 'firebase-functions/v1'
 import { VertexAI } from '@google-cloud/vertexai'
-import { buildStoryPrompts, STORY_PROMPT_VERSION } from './storyPrompts'
+import { buildStoryPrompts, STORY_PROMPT_VERSION, AgeRange } from './storyPrompts'
 
 const vertexProject = process.env.VERTEX_PROJECT_ID || process.env.GCLOUD_PROJECT
 if (!vertexProject) {
@@ -238,15 +238,16 @@ export const onStoryRequest = functions
     try {
       const data = snap.data()
       const { characterName, theme } = data
+      const ageRange = (data.ageRange as AgeRange) || '5-10'
 
       if (!characterName || !theme) {
         await snap.ref.update({ status: 'error', error: 'characterName and theme are required' })
         return
       }
 
-      const { systemPrompt, userPrompt } = buildStoryPrompts({ characterName, theme })
+      const { systemPrompt, userPrompt } = buildStoryPrompts({ characterName, theme, ageRange })
 
-      console.log(`[Story] Generating story for character="${characterName}", theme="${theme}", promptVersion="${STORY_PROMPT_VERSION}"`)
+      console.log(`[Story] Generating story for character="${characterName}", theme="${theme}", ageRange="${ageRange}", promptVersion="${STORY_PROMPT_VERSION}"`)
 
       try {
         const textContent = await invokeVertexWithRetry(systemPrompt, userPrompt, 2)

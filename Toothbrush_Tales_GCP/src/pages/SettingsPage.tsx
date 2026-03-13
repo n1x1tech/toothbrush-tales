@@ -1,8 +1,14 @@
 import { useState, useRef } from 'react'
-import { useAppStore, PlaybackMode } from '../store/useAppStore'
+import { useAppStore, PlaybackMode, AgeRange } from '../store/useAppStore'
 import { db, ensureAuth } from '../lib/firebase'
 import { collection, addDoc, onSnapshot, doc } from 'firebase/firestore'
 import styles from './SettingsPage.module.css'
+
+const AGE_RANGES: { value: AgeRange; label: string; description: string }[] = [
+  { value: '2-5', label: 'Ages 2-5', description: 'Very simple words, short sentences, silly sounds' },
+  { value: '5-10', label: 'Ages 5-10', description: 'Playful and clear, the classic experience' },
+  { value: '10-15', label: 'Ages 10-15', description: 'More adventure, richer vocabulary, longer narrative' },
+]
 
 const PLAYBACK_MODES: { value: PlaybackMode; label: string; description: string }[] = [
   { value: 'audio', label: 'Audio Only', description: 'Listen to the story being read aloud' },
@@ -46,6 +52,8 @@ const TTS_PREVIEW_TIMEOUT_MS = 35000
 
 export default function SettingsPage() {
   const {
+    ageRange,
+    setAgeRange,
     playbackMode,
     setPlaybackMode,
     voiceId,
@@ -144,6 +152,27 @@ export default function SettingsPage() {
   return (
     <div className={styles.container}>
       <h1 className={styles.title}>Voice & Playback</h1>
+
+      <section className={styles.section}>
+        <h2 className={styles.sectionTitle}>Story Age Range</h2>
+        <div className={styles.optionList}>
+          {AGE_RANGES.map((range) => (
+            <label key={range.value} className={styles.radioOption}>
+              <input
+                type="radio"
+                name="ageRange"
+                value={range.value}
+                checked={ageRange === range.value}
+                onChange={() => setAgeRange(range.value)}
+              />
+              <div className={styles.radioContent}>
+                <span className={styles.radioLabel}>{range.label}</span>
+                <span className={styles.radioDescription}>{range.description}</span>
+              </div>
+            </label>
+          ))}
+        </div>
+      </section>
 
       <section className={styles.section}>
         <h2 className={styles.sectionTitle}>Playback Mode</h2>

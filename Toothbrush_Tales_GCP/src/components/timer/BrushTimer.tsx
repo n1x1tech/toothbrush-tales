@@ -68,7 +68,7 @@ export default function BrushTimer({
   const strokeWidth = 10
   const radius = (size - strokeWidth) / 2
   const circumference = 2 * Math.PI * radius
-  const strokeDashoffset = circumference * (1 - progress)
+  const strokeDashoffset = circumference * progress
 
   // Ring color transitions: teal → green → gold
   const getRingColor = () => {
