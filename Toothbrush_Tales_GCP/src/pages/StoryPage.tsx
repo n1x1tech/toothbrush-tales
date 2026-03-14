@@ -7,6 +7,7 @@ import type { Story } from '../hooks/useStoryGeneration'
 import { useAppStore } from '../store/useAppStore'
 import { db, ensureAuth } from '../lib/firebase'
 import { trackTelemetryEvent } from '../lib/telemetry'
+import { trackEvent } from '../lib/analytics'
 import { collection, addDoc, onSnapshot, doc } from 'firebase/firestore'
 import styles from './StoryPage.module.css'
 
@@ -43,7 +44,7 @@ export default function StoryPage() {
   const navigate = useNavigate()
 
   // Store
-  const { playbackMode, autoPlay, voiceId, addToHistory, toggleFavorite, isFavorite } = useAppStore()
+  const { playbackMode, autoPlay, voiceId, ageRange, addToHistory, toggleFavorite, isFavorite } = useAppStore()
 
   // Get story from navigation state, or use fallback
   const [story] = useState<Story>(() => {
@@ -63,6 +64,7 @@ export default function StoryPage() {
   const introMinElapsedRef = useRef(false)
   const onQueueItemCompleteRef = useRef<(() => void) | null>(null)
   const sessionIdRef = useRef(crypto.randomUUID())
+  const startTimeRef = useRef<number>(0)
 
   // TTS state
   const [isSpeaking, setIsSpeaking] = useState(false)
@@ -477,6 +479,7 @@ export default function StoryPage() {
       autoPlay,
       playbackMode,
     })
+    trackEvent('brush_session_completed', { age_range: ageRange, playback_mode: playbackMode })
     setPhase('complete')
   }
 
@@ -520,12 +523,18 @@ export default function StoryPage() {
 
   const handleStop = () => {
     setIsTimerPaused(true)
+    const elapsedSeconds = startTimeRef.current ? Math.round((Date.now() - startTimeRef.current) / 1000) : 0
     void trackTelemetryEvent('session_stop', {
       sessionId: sessionIdRef.current,
       phase,
       currentSegment,
       autoPlay,
       playbackMode,
+    })
+    trackEvent('brush_session_abandoned', {
+      quit_segment: currentSegment,
+      elapsed_seconds: elapsedSeconds,
+      age_range: ageRange,
     })
     stop()
   }
@@ -543,10 +552,12 @@ export default function StoryPage() {
     introAudioDoneRef.current = false
     introMinElapsedRef.current = false
     sessionIdRef.current = crypto.randomUUID()
+    startTimeRef.current = Date.now()
     setIsTimerPaused(false)
 
     // Move to intro phase IMMEDIATELY (synchronously)
     setPhase('intro')
+    trackEvent('brush_session_started')
     void trackTelemetryEvent('session_start', {
       sessionId: sessionIdRef.current,
       phase: 'intro',

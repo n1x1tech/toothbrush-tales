@@ -3,6 +3,7 @@ import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth'
 import { getFirestore } from 'firebase/firestore'
 import { getFunctions } from 'firebase/functions'
 import { getStorage } from 'firebase/storage'
+import { getAnalytics, setConsent, type Analytics } from 'firebase/analytics'
 
 function requireEnv(name: keyof ImportMetaEnv): string {
   const value = import.meta.env[name]
@@ -27,6 +28,23 @@ export const auth = getAuth(app)
 export const db = getFirestore(app)
 export const functions = getFunctions(app, import.meta.env.VITE_FIREBASE_FUNCTIONS_REGION || 'us-central1')
 export const storage = getStorage(app)
+
+// COPPA-compliant analytics: deny all ad-related consent before initialization
+setConsent({
+  ad_storage: 'denied',
+  ad_user_data: 'denied',
+  ad_personalization: 'denied',
+  analytics_storage: 'granted',
+})
+
+export let analytics: Analytics | null = null
+try {
+  if (firebaseConfig.measurementId) {
+    analytics = getAnalytics(app)
+  }
+} catch {
+  // Analytics unavailable (e.g., blocked by browser extension)
+}
 
 // Auto sign-in anonymously (equivalent to Cognito guest access)
 export async function ensureAuth() {

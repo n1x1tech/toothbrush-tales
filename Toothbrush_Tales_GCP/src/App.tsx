@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import Layout from './components/layout/Layout'
 import HomePage from './pages/HomePage'
@@ -5,8 +6,13 @@ import StoryPage from './pages/StoryPage'
 import HistoryPage from './pages/HistoryPage'
 import SettingsPage from './pages/SettingsPage'
 import TelemetryPage from './pages/TelemetryPage'
+import { trackEvent } from './lib/analytics'
 
 function App() {
+  useEffect(() => {
+    trackEvent('app_opened')
+  }, [])
+
   return (
     <BrowserRouter>
       <Routes>

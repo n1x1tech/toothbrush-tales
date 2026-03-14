@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react'
 import { useAppStore, PlaybackMode, AgeRange } from '../store/useAppStore'
 import { db, ensureAuth } from '../lib/firebase'
+import { trackEvent } from '../lib/analytics'
 import { collection, addDoc, onSnapshot, doc } from 'firebase/firestore'
 import styles from './SettingsPage.module.css'
 
@@ -163,7 +164,7 @@ export default function SettingsPage() {
                 name="ageRange"
                 value={range.value}
                 checked={ageRange === range.value}
-                onChange={() => setAgeRange(range.value)}
+                onChange={() => { setAgeRange(range.value); trackEvent('settings_changed', { setting_name: 'age_range', new_value: range.value }) }}
               />
               <div className={styles.radioContent}>
                 <span className={styles.radioLabel}>{range.label}</span>
@@ -184,7 +185,7 @@ export default function SettingsPage() {
                 name="playbackMode"
                 value={mode.value}
                 checked={playbackMode === mode.value}
-                onChange={() => setPlaybackMode(mode.value)}
+                onChange={() => { setPlaybackMode(mode.value); trackEvent('settings_changed', { setting_name: 'playback_mode', new_value: mode.value }) }}
               />
               <div className={styles.radioContent}>
                 <span className={styles.radioLabel}>{mode.label}</span>
@@ -219,6 +220,7 @@ export default function SettingsPage() {
                   className={`${styles.voiceButton} ${voiceId === voice.id ? styles.selected : ''} ${previewingVoice === voice.id ? styles.previewing : ''}`}
                   onClick={() => {
                     setVoiceId(voice.id)
+                    trackEvent('settings_changed', { setting_name: 'voice', new_value: voice.id })
                     previewVoice(voice)
                   }}
                   disabled={previewingVoice !== null}
@@ -241,7 +243,7 @@ export default function SettingsPage() {
           <input
             type="checkbox"
             checked={autoPlay}
-            onChange={(e) => setAutoPlay(e.target.checked)}
+            onChange={(e) => { setAutoPlay(e.target.checked); trackEvent('settings_changed', { setting_name: 'auto_play', new_value: e.target.checked }) }}
           />
           <div className={styles.toggleContent}>
             <span className={styles.toggleLabel}>Auto-play narration</span>

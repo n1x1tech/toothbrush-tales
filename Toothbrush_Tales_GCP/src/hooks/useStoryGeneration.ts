@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react'
 import { db } from '../lib/firebase'
 import { collection, addDoc, onSnapshot, doc } from 'firebase/firestore'
 import { ensureAuth } from '../lib/firebase'
+import { trackEvent } from '../lib/analytics'
 
 // Story type for frontend use
 export interface Story {
@@ -122,6 +123,13 @@ export function useStoryGeneration() {
       // First request uses longer timeout for cold-start tolerance.
       const firstAttempt = await createRequestAndWait(45000)
       if (firstAttempt) {
+        const names = characterName.split(/,\s*|\s+and\s+|\s+&\s+/).filter(n => n.trim().length > 0)
+        trackEvent('story_generated', {
+          theme,
+          character_count: names.length,
+          age_range: ageRange || '5-10',
+          is_fallback: firstAttempt.isFallback || false,
+        })
         return firstAttempt
       }
 
@@ -129,13 +137,22 @@ export function useStoryGeneration() {
       console.warn('[StoryGen] Retrying story generation after initial timeout/error')
       const secondAttempt = await createRequestAndWait(30000)
       if (secondAttempt) {
+        const names = characterName.split(/,\s*|\s+and\s+|\s+&\s+/).filter(n => n.trim().length > 0)
+        trackEvent('story_generated', {
+          theme,
+          character_count: names.length,
+          age_range: ageRange || '5-10',
+          is_fallback: secondAttempt.isFallback || false,
+        })
         return secondAttempt
       }
 
+      trackEvent('story_generation_failed', { reason: 'timeout' })
       setError(new Error('Story generation timed out'))
       return createFallbackStory(characterName, theme)
     } catch (err) {
       console.warn('[StoryGen] Error, using fallback story:', err)
+      trackEvent('story_generation_failed', { reason: 'error' })
       setError(err instanceof Error ? err : new Error('Story generation unavailable'))
       return createFallbackStory(characterName, theme)
     } finally {
