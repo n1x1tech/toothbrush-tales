@@ -1,0 +1,51 @@
+{
+  "packageId": "app.web.toothbrush_tales.twa",
+  "host": "toothbrush-tales.web.app",
+  "name": "Toothbrush Tales",
+  "launcherName": "Brush Tales",
+  "display": "standalone",
+  "themeColor": "#FF6B6B",
+  "themeColorDark": "#000000",
+  "navigationColor": "#000000",
+  "navigationColorDark": "#000000",
+  "navigationDividerColor": "#000000",
+  "navigationDividerColorDark": "#000000",
+  "backgroundColor": "#F7FFF7",
+  "enableNotifications": false,
+  "startUrl": "/",
+  "iconUrl": "https://toothbrush-tales.web.app/icons/icon-512x512.png",
+  "maskableIconUrl": "https://toothbrush-tales.web.app/icons/icon-512x512.png",
+  "splashScreenFadeOutDuration": 300,
+  "signingKey": {
+    "path": "C:\\Users\\nixi\\Documents\\Kids_Games\\toothbrush_tales\\android.keystore",
+    "alias": "android"
+  },
+  "appVersionName": "1",
+  "appVersionCode": 1,
+  "shortcuts": [],
+  "generatorApp": "bubblewrap-cli",
+  "webManifestUrl": "https://toothbrush-tales.web.app/manifest.webmanifest",
+  "fallbackType": "customtabs",
+  "features": {
+    "playBilling": {
+      "enabled": false
+    }
+  },
+  "alphaDependencies": {
+    "enabled": false
+  },
+  "enableSiteSettingsShortcut": true,
+  "isChromeOSOnly": false,
+  "isMetaQuest": false,
+  "fullScopeUrl": "https://toothbrush-tales.web.app/",
+  "minSdkVersion": 21,
+  "orientation": "portrait",
+  "fingerprints": [],
+  "additionalTrustedOrigins": [],
+  "retainedBundles": [],
+  "protocolHandlers": [],
+  "fileHandlers": [],
+  "launchHandlerClientMode": "",
+  "displayOverride": [],
+  "appVersion": "1"
+}
