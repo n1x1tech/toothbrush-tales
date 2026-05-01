@@ -10,16 +10,6 @@
   color: var(--color-text);
 }
 
-.inputWrapper {
-  display: flex;
-  gap: 0.5rem;
-}
-
-.input {
-  flex: 1;
-  min-width: 0;
-}
-
 .suggestions {
   display: flex;
   flex-wrap: wrap;

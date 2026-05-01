@@ -68,7 +68,8 @@ export default function BrushTimer({
   const strokeWidth = 10
   const radius = (size - strokeWidth) / 2
   const circumference = 2 * Math.PI * radius
-  const strokeDashoffset = circumference * (1 - progress)
+  // Negative offset drains the ring clockwise from 12 o'clock (gap grows CW as time elapses).
+  const strokeDashoffset = -circumference * progress
 
   // Ring color transitions: teal -> green -> gold
   const getRingColor = () => {

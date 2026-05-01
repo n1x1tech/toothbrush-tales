@@ -9,7 +9,7 @@ if (!vertexProject) {
 
 const vertexLocation = process.env.VERTEX_LOCATION || 'us-central1'
 const vertexAI = new VertexAI({ project: vertexProject, location: vertexLocation })
-const geminiModel = vertexAI.getGenerativeModel({ model: 'gemini-2.0-flash' })
+const geminiModel = vertexAI.getGenerativeModel({ model: 'gemini-3-flash-preview' })
 
 // Dynamic fallback story templates that actually use the theme (~200 words each)
 const STORY_TEMPLATES = [
@@ -100,7 +100,7 @@ function createDynamicFallbackStory(characterName: string, theme: string): Story
   }
 }
 
-// Call Vertex AI Gemini 2.0 Flash
+// Call Vertex AI Gemini 3 Flash
 async function generateStoryWithGemini(
   systemPrompt: string,
   userPrompt: string,
