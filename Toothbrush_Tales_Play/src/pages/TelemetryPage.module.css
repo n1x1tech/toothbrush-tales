@@ -1,0 +1,78 @@
+.container {
+  width: min(960px, 100%);
+  margin: 0 auto;
+  padding: 1.5rem 1rem 5.5rem;
+}
+
+.title {
+  font-size: 1.75rem;
+  font-weight: 800;
+  color: var(--color-text);
+  margin-bottom: 1rem;
+}
+
+.section {
+  background: var(--color-white);
+  border-radius: 14px;
+  box-shadow: var(--shadow-soft);
+  padding: 1rem;
+  margin-bottom: 1rem;
+}
+
+.sectionTitle {
+  margin: 0 0 0.75rem;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.75rem;
+}
+
+.card {
+  border: 1px solid #ececec;
+  border-radius: 10px;
+  padding: 0.75rem;
+}
+
+.metricLabel {
+  font-size: 0.82rem;
+  color: var(--color-text-light);
+}
+
+.metricValue {
+  font-size: 1.35rem;
+  font-weight: 800;
+  color: var(--color-text);
+  margin-top: 0.25rem;
+}
+
+.funnel {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.funnelRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #f8fafc;
+  border-radius: 8px;
+  padding: 0.65rem 0.75rem;
+  color: var(--color-text);
+}
+
+.muted {
+  color: var(--color-text-light);
+}
+
+.errorBox {
+  background: #fff1f1;
+  color: #8f1f1f;
+  border: 1px solid #ffd1d1;
+  border-radius: 10px;
+  padding: 0.75rem;
+}

@@ -1,0 +1,41 @@
+.container {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 1.5rem;
+  color: var(--color-text);
+  line-height: 1.6;
+  font-size: 1rem;
+}
+
+.title {
+  font-size: 1.8rem;
+  margin-bottom: 0.25rem;
+  color: var(--color-primary);
+}
+
+.effective {
+  margin-top: 0;
+  margin-bottom: 1.5rem;
+  color: #666;
+  font-size: 0.95rem;
+}
+
+.container h2 {
+  margin-top: 1.75rem;
+  margin-bottom: 0.5rem;
+  font-size: 1.2rem;
+  color: var(--color-primary);
+}
+
+.container ul {
+  padding-left: 1.25rem;
+}
+
+.container li {
+  margin-bottom: 0.6rem;
+}
+
+.container a {
+  color: var(--color-secondary);
+  text-decoration: underline;
+}

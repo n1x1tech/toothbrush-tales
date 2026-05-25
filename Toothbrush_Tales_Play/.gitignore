@@ -1,0 +1,47 @@
+# Dependencies
+node_modules/
+functions/node_modules/
+
+# Build output
+dist/
+functions/lib/
+*.tsbuildinfo
+vite.config.js
+vite.config.d.ts
+
+# Firebase
+.firebase/
+
+# Claude
+.claude/
+
+# Environment
+.env
+.env.*
+.env.local
+.env.*.local
+!.env.example
+!functions/.env.example
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Android / TWA build artifacts
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/captures/
+android/.idea/
+android/manifest-checksum.txt
+
+# Android signing & packaged outputs (never commit)
+*.keystore
+*.jks
+*.apk
+*.aab
+*.idsig

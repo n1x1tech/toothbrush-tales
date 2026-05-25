@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.toothbrush_tales.app",
+      "sha256_cert_fingerprints": [
+        "8E:33:3C:54:33:36:64:A9:BF:90:28:AA:39:9C:0C:A1:78:31:36:6B:08:2C:B2:53:C9:23:B9:6A:34:A2:77:C6"
+      ]
+    }
+  }
+]
