@@ -4,6 +4,7 @@ import BrushTimer from '../components/timer/BrushTimer'
 import StoryPlayer from '../components/story/StoryPlayer'
 import PlaybackControls from '../components/story/PlaybackControls'
 import type { Story } from '../hooks/useStoryGeneration'
+import { useWakeLock } from '../hooks/useWakeLock'
 import { useAppStore } from '../store/useAppStore'
 import { db, ensureAuth } from '../lib/firebase'
 import { trackTelemetryEvent } from '../lib/telemetry'
@@ -56,6 +57,9 @@ export default function StoryPage() {
   // Phases: 'waiting' -> 'intro' -> 'brushing' -> 'complete'
   // 'waiting' phase requires user tap to unlock audio on iOS
   const [phase, setPhase] = useState<'waiting' | 'intro' | 'brushing' | 'complete'>('waiting')
+
+  // Keep the screen awake during the brush session. Released on unmount.
+  useWakeLock(phase !== 'waiting')
   const [currentSegment, setCurrentSegment] = useState(0)
   const [spokenSegments, setSpokenSegments] = useState<Set<number>>(new Set())
   const hasSpokenIntro = useRef(false)

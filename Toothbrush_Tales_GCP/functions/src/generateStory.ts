@@ -9,7 +9,58 @@ if (!vertexProject) {
 
 const vertexLocation = process.env.VERTEX_LOCATION || 'us-central1'
 const vertexAI = new VertexAI({ project: vertexProject, location: vertexLocation })
-const geminiModel = vertexAI.getGenerativeModel({ model: 'gemini-3-flash-preview' })
+
+// Ordered list of model candidates. We fall through to the next on NOT_FOUND
+// only (e.g. a preview/GA model is pulled). Quota/auth errors fail fast.
+const MODEL_CANDIDATES = ['gemini-2.5-flash', 'gemini-2.5-pro'] as const
+
+// thinkingBudget: 0 — Gemini 2.5 spends thousands of "thinking" tokens by
+// default, eating maxOutputTokens before any JSON is produced. Story generation
+// is creative writing with no reasoning required, so we turn it off.
+const STORY_GENERATION_CONFIG = {
+  temperature: 0.9,
+  maxOutputTokens: 2000,
+  responseMimeType: 'application/json',
+  thinkingConfig: { thinkingBudget: 0 },
+} as const
+
+const REPAIR_GENERATION_CONFIG = {
+  temperature: 0,
+  maxOutputTokens: 2000,
+  responseMimeType: 'application/json',
+  thinkingConfig: { thinkingBudget: 0 },
+} as const
+
+function isModelNotFound(err: unknown): boolean {
+  const msg = String((err as { message?: string })?.message || err)
+  return /NOT_FOUND|was not found/i.test(msg)
+}
+
+async function callGeminiWithFallback(
+  systemPrompt: string,
+  userPrompt: string,
+  generationConfig: typeof STORY_GENERATION_CONFIG | typeof REPAIR_GENERATION_CONFIG,
+): Promise<string> {
+  let lastErr: unknown
+  for (const modelName of MODEL_CANDIDATES) {
+    try {
+      const model = vertexAI.getGenerativeModel({ model: modelName })
+      const result = await model.generateContent({
+        systemInstruction: { role: 'system', parts: [{ text: systemPrompt }] },
+        contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
+        generationConfig: generationConfig as unknown as Record<string, unknown>,
+      })
+      return result.response.candidates?.[0]?.content?.parts?.[0]?.text || ''
+    } catch (err) {
+      lastErr = err
+      if (!isModelNotFound(err)) {
+        throw err
+      }
+      console.warn(`[Story] Model ${modelName} NOT_FOUND, trying next candidate`)
+    }
+  }
+  throw lastErr ?? new Error('All Gemini model candidates failed')
+}
 
 // Dynamic fallback story templates that actually use the theme (~200 words each)
 const STORY_TEMPLATES = [
@@ -100,21 +151,11 @@ function createDynamicFallbackStory(characterName: string, theme: string): Story
   }
 }
 
-// Call Vertex AI Gemini 3 Flash
 async function generateStoryWithGemini(
   systemPrompt: string,
   userPrompt: string,
 ): Promise<string> {
-  const result = await geminiModel.generateContent({
-    systemInstruction: { role: 'system', parts: [{ text: systemPrompt }] },
-    contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
-    generationConfig: {
-      temperature: 0.9,
-      maxOutputTokens: 2000,
-      responseMimeType: 'application/json'
-    },
-  })
-  return result.response.candidates?.[0]?.content?.parts?.[0]?.text || ''
+  return callGeminiWithFallback(systemPrompt, userPrompt, STORY_GENERATION_CONFIG)
 }
 
 async function repairStoryJsonWithGemini(invalidPayload: string): Promise<string> {
@@ -131,17 +172,7 @@ Do not include markdown or any extra keys.`
   const repairUserPrompt = `Repair this malformed JSON and keep the story content as close as possible:
 ${invalidPayload}`
 
-  const result = await geminiModel.generateContent({
-    systemInstruction: { role: 'system', parts: [{ text: repairSystemPrompt }] },
-    contents: [{ role: 'user', parts: [{ text: repairUserPrompt }] }],
-    generationConfig: {
-      temperature: 0,
-      maxOutputTokens: 2000,
-      responseMimeType: 'application/json'
-    },
-  })
-
-  return result.response.candidates?.[0]?.content?.parts?.[0]?.text || ''
+  return callGeminiWithFallback(repairSystemPrompt, repairUserPrompt, REPAIR_GENERATION_CONFIG)
 }
 
 function normalizeGeminiJsonPayload(textContent: string): string {
