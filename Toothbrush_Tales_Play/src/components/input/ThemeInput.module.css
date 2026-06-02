@@ -29,3 +29,36 @@
   background: var(--color-accent);
   color: var(--color-text);
 }
+
+.lockedInput {
+  width: 100%;
+  text-align: left;
+  background: #fafafa;
+  border: 2px dashed #ccc;
+  color: var(--color-text-light);
+  padding: 0.75rem 1rem;
+  font-size: 1rem;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.lockedInput:hover {
+  border-color: var(--color-secondary);
+  background: #fff7e6;
+}
+
+.lockedHint {
+  display: block;
+  font-style: italic;
+}
+
+.unlockLink {
+  align-self: flex-start;
+  background: transparent;
+  border: none;
+  color: var(--color-secondary, #f5a623);
+  font-size: 0.85rem;
+  padding: 0;
+  text-decoration: underline;
+  cursor: pointer;
+}

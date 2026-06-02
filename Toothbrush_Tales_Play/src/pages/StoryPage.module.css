@@ -69,6 +69,25 @@
   animation: pulse 2s infinite;
 }
 
+.premiumUpsell {
+  background: linear-gradient(135deg, #fff7e6 0%, #ffffff 100%);
+  border: 2px solid var(--color-secondary, #f5a623);
+  color: var(--color-text);
+  padding: 0.85rem 1rem;
+  font-size: 0.95rem;
+  border-radius: var(--border-radius);
+  cursor: pointer;
+  line-height: 1.4;
+}
+
+.premiumUpsell strong {
+  color: var(--color-secondary, #f5a623);
+}
+
+.premiumUpsell:hover {
+  filter: brightness(0.98);
+}
+
 @keyframes pulse {
   0%, 100% {
     transform: scale(1);

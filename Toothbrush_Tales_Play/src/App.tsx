@@ -7,6 +7,7 @@ import HistoryPage from './pages/HistoryPage'
 import SettingsPage from './pages/SettingsPage'
 import TelemetryPage from './pages/TelemetryPage'
 import PrivacyPage from './pages/PrivacyPage'
+import Paywall from './components/paywall/Paywall'
 import { trackEvent } from './lib/analytics'
 
 function App() {
@@ -26,6 +27,7 @@ function App() {
           <Route path="privacy" element={<PrivacyPage />} />
         </Route>
       </Routes>
+      <Paywall />
     </BrowserRouter>
   )
 }

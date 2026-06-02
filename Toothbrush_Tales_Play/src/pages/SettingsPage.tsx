@@ -1,9 +1,10 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { useAppStore, PlaybackMode, AgeRange } from '../store/useAppStore'
+import { useAppStore, PlaybackMode, AgeRange, VoiceMode, PAYWALL_ENABLED } from '../store/useAppStore'
 import { db, ensureAuth } from '../lib/firebase'
 import { trackEvent } from '../lib/analytics'
 import { collection, addDoc, onSnapshot, doc } from 'firebase/firestore'
+import { getAvailableVoices, VoiceOption } from '../hooks/useTextToSpeech'
 import styles from './SettingsPage.module.css'
 
 const AGE_RANGES: { value: AgeRange; label: string; description: string }[] = [
@@ -16,6 +17,11 @@ const PLAYBACK_MODES: { value: PlaybackMode; label: string; description: string 
   { value: 'audio', label: 'Audio Only', description: 'Listen to the story being read aloud' },
   { value: 'text', label: 'Text Only', description: 'Read the story on screen' },
   { value: 'both', label: 'Audio + Text', description: 'Listen and read along' },
+]
+
+const VOICE_MODES: { value: VoiceMode; label: string; description: string }[] = [
+  { value: 'device', label: 'Device Voices', description: "Free, works offline. Uses your phone's built-in voices." },
+  { value: 'cloud', label: 'Premium Voices', description: 'Higher-quality natural AI voices. Requires internet.' },
 ]
 
 // Google Cloud TTS voices - using friendly names that map to voice IDs on the backend
@@ -58,16 +64,63 @@ export default function SettingsPage() {
     setAgeRange,
     playbackMode,
     setPlaybackMode,
+    voiceMode,
+    setVoiceMode,
     voiceId,
     setVoiceId,
+    deviceVoiceId,
+    setDeviceVoiceId,
     autoPlay,
     setAutoPlay,
     clearHistory,
+    entitlement,
+    openPaywall,
   } = useAppStore()
+
+  // When paywall is disabled (v1), cloud voices are available to everyone.
+  const isPremium = !PAYWALL_ENABLED || entitlement === 'premium'
 
   const [previewingVoice, setPreviewingVoice] = useState<string | null>(null)
   const [previewError, setPreviewError] = useState<string | null>(null)
   const audioRef = useRef<HTMLAudioElement | null>(null)
+
+  // Device voices load asynchronously in some browsers — listen for changes.
+  const [deviceVoices, setDeviceVoices] = useState<VoiceOption[]>(() => getAvailableVoices())
+  useEffect(() => {
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) return
+    const refresh = () => setDeviceVoices(getAvailableVoices())
+    refresh()
+    window.speechSynthesis.onvoiceschanged = refresh
+    return () => {
+      window.speechSynthesis.onvoiceschanged = null
+    }
+  }, [])
+
+  // Preview a device voice via the browser's built-in SpeechSynthesis
+  const previewDeviceVoice = (voice: VoiceOption) => {
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
+      setPreviewError('This device does not support browser voices.')
+      return
+    }
+    window.speechSynthesis.cancel()
+    setPreviewingVoice(voice.id)
+    setPreviewError(null)
+
+    const utterance = new SpeechSynthesisUtterance(
+      `Hi there! I'm ${voice.name}. Let's brush those teeth and make them sparkle!`
+    )
+    utterance.rate = 0.9
+    utterance.pitch = 1.05
+    const match = window.speechSynthesis.getVoices().find((v) => v.name === voice.id)
+    if (match) utterance.voice = match
+
+    utterance.onend = () => setPreviewingVoice(null)
+    utterance.onerror = () => {
+      setPreviewingVoice(null)
+      setPreviewError('Failed to play this device voice.')
+    }
+    window.speechSynthesis.speak(utterance)
+  }
 
   // Preview a voice using Google Cloud TTS via Firestore
   const previewVoice = async (voice: TTSVoice) => {
@@ -198,8 +251,45 @@ export default function SettingsPage() {
       </section>
 
       <section className={styles.section}>
+        <h2 className={styles.sectionTitle}>Voice Source</h2>
+        <div className={styles.optionList}>
+          {VOICE_MODES.map((mode) => {
+            const isLocked = mode.value === 'cloud' && !isPremium
+            return (
+              <label key={mode.value} className={styles.radioOption}>
+                <input
+                  type="radio"
+                  name="voiceMode"
+                  value={mode.value}
+                  checked={voiceMode === mode.value}
+                  onChange={() => {
+                    if (isLocked) {
+                      openPaywall('cloud_voice')
+                      return
+                    }
+                    setVoiceMode(mode.value)
+                    trackEvent('settings_changed', { setting_name: 'voice_mode', new_value: mode.value })
+                  }}
+                />
+                <div className={styles.radioContent}>
+                  <span className={styles.radioLabel}>
+                    {mode.label}{isLocked ? ' 🔒 Premium' : ''}
+                  </span>
+                  <span className={styles.radioDescription}>{mode.description}</span>
+                </div>
+              </label>
+            )
+          })}
+        </div>
+      </section>
+
+      <section className={styles.section}>
         <h2 className={styles.sectionTitle}>Voice Selection</h2>
-        <p className={styles.sectionHint}>Natural AI voices powered by Google Cloud TTS (tap to preview)</p>
+        <p className={styles.sectionHint}>
+          {voiceMode === 'device'
+            ? "Pick from voices installed on this device (tap to preview)"
+            : "Natural AI voices powered by Google Cloud TTS (tap to preview)"}
+        </p>
 
         {previewError && (
           <div className={styles.voiceTip}>
@@ -208,34 +298,84 @@ export default function SettingsPage() {
           </div>
         )}
 
-        {sortedAccents.map((accent) => (
-          <div key={accent} className={styles.accentGroup}>
-            <h3 className={styles.accentTitle}>
-              {accent === 'Australian' ? '\uD83E\uDD98 ' : accent === 'British' ? '\uD83C\uDDEC\uD83C\uDDE7 ' : accent === 'American' ? '\uD83C\uDDFA\uD83C\uDDF8 ' : accent === 'Indian' ? '\uD83C\uDDEE\uD83C\uDDF3 ' : ''}
-              {accent}
-            </h3>
-            <div className={styles.voiceGrid}>
-              {voicesByAccent[accent].map((voice) => (
-                <button
-                  key={voice.id}
-                  className={`${styles.voiceButton} ${voiceId === voice.id ? styles.selected : ''} ${previewingVoice === voice.id ? styles.previewing : ''}`}
-                  onClick={() => {
-                    setVoiceId(voice.id)
-                    trackEvent('settings_changed', { setting_name: 'voice', new_value: voice.id })
-                    previewVoice(voice)
-                  }}
-                  disabled={previewingVoice !== null}
-                >
-                  <span className={styles.voiceName}>{voice.name}</span>
-                  <span className={styles.voiceDescription}>{voice.description}</span>
-                  {previewingVoice === voice.id && (
-                    <span className={styles.previewIndicator}>Playing...</span>
-                  )}
-                </button>
-              ))}
+        {voiceMode === 'device' ? (
+          deviceVoices.length === 0 ? (
+            <p className={styles.loadingVoices}>Loading device voices...</p>
+          ) : (
+            Object.entries(
+              deviceVoices.reduce((acc, voice) => {
+                if (!acc[voice.accent]) acc[voice.accent] = []
+                acc[voice.accent].push(voice)
+                return acc
+              }, {} as Record<string, VoiceOption[]>)
+            )
+              .sort(([a], [b]) => {
+                const order = ['Australian', 'British', 'American', 'Canadian', 'Irish', 'Indian', 'New Zealand', 'South African']
+                const ai = order.indexOf(a), bi = order.indexOf(b)
+                if (ai === -1 && bi === -1) return a.localeCompare(b)
+                if (ai === -1) return 1
+                if (bi === -1) return -1
+                return ai - bi
+              })
+              .map(([accent, voices]) => (
+                <div key={accent} className={styles.accentGroup}>
+                  <h3 className={styles.accentTitle}>
+                    {accent === 'Australian' ? '\uD83E\uDD98 ' : accent === 'British' ? '\uD83C\uDDEC\uD83C\uDDE7 ' : accent === 'American' ? '\uD83C\uDDFA\uD83C\uDDF8 ' : accent === 'Indian' ? '\uD83C\uDDEE\uD83C\uDDF3 ' : ''}
+                    {accent}
+                  </h3>
+                  <div className={styles.voiceGrid}>
+                    {voices.map((voice) => (
+                      <button
+                        key={voice.id}
+                        className={`${styles.voiceButton} ${deviceVoiceId === voice.id ? styles.selected : ''} ${previewingVoice === voice.id ? styles.previewing : ''}`}
+                        onClick={() => {
+                          setDeviceVoiceId(voice.id)
+                          trackEvent('settings_changed', { setting_name: 'device_voice', new_value: voice.id })
+                          previewDeviceVoice(voice)
+                        }}
+                        disabled={previewingVoice !== null}
+                      >
+                        <span className={styles.voiceName}>{voice.name}</span>
+                        <span className={styles.voiceDescription}>{voice.description}</span>
+                        {previewingVoice === voice.id && (
+                          <span className={styles.previewIndicator}>Playing...</span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))
+          )
+        ) : (
+          sortedAccents.map((accent) => (
+            <div key={accent} className={styles.accentGroup}>
+              <h3 className={styles.accentTitle}>
+                {accent === 'Australian' ? '\uD83E\uDD98 ' : accent === 'British' ? '\uD83C\uDDEC\uD83C\uDDE7 ' : accent === 'American' ? '\uD83C\uDDFA\uD83C\uDDF8 ' : accent === 'Indian' ? '\uD83C\uDDEE\uD83C\uDDF3 ' : ''}
+                {accent}
+              </h3>
+              <div className={styles.voiceGrid}>
+                {voicesByAccent[accent].map((voice) => (
+                  <button
+                    key={voice.id}
+                    className={`${styles.voiceButton} ${voiceId === voice.id ? styles.selected : ''} ${previewingVoice === voice.id ? styles.previewing : ''}`}
+                    onClick={() => {
+                      setVoiceId(voice.id)
+                      trackEvent('settings_changed', { setting_name: 'voice', new_value: voice.id })
+                      previewVoice(voice)
+                    }}
+                    disabled={previewingVoice !== null}
+                  >
+                    <span className={styles.voiceName}>{voice.name}</span>
+                    <span className={styles.voiceDescription}>{voice.description}</span>
+                    {previewingVoice === voice.id && (
+                      <span className={styles.previewIndicator}>Playing...</span>
+                    )}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
-        ))}
+          ))
+        )}
       </section>
 
       <section className={styles.section}>

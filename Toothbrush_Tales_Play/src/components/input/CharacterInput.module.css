@@ -29,3 +29,14 @@
   background: var(--color-secondary);
   color: white;
 }
+
+.unlockHint {
+  align-self: flex-start;
+  background: #fff7e6;
+  border: 1px solid var(--color-secondary, #f5a623);
+  color: var(--color-secondary, #f5a623);
+  font-size: 0.85rem;
+  padding: 0.4rem 0.75rem;
+  border-radius: 6px;
+  cursor: pointer;
+}

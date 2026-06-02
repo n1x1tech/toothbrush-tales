@@ -4,7 +4,8 @@ import BrushTimer from '../components/timer/BrushTimer'
 import StoryPlayer from '../components/story/StoryPlayer'
 import PlaybackControls from '../components/story/PlaybackControls'
 import type { Story } from '../hooks/useStoryGeneration'
-import { useAppStore } from '../store/useAppStore'
+import { useWakeLock } from '../hooks/useWakeLock'
+import { useAppStore, canGenerateNewStory, isInHoneymoon, PAYWALL_ENABLED } from '../store/useAppStore'
 import { db, ensureAuth } from '../lib/firebase'
 import { trackTelemetryEvent } from '../lib/telemetry'
 import { trackEvent } from '../lib/analytics'
@@ -44,7 +45,10 @@ export default function StoryPage() {
   const navigate = useNavigate()
 
   // Store
-  const { playbackMode, autoPlay, voiceId, ageRange, addToHistory, toggleFavorite, isFavorite } = useAppStore()
+  const { playbackMode, autoPlay, voiceMode, voiceId, deviceVoiceId, ageRange, addToHistory, toggleFavorite, isFavorite, entitlement, installDate, dailyUsage, openPaywall } = useAppStore()
+
+  const isFree = entitlement === 'free'
+  const showUpsell = PAYWALL_ENABLED && isFree && !isInHoneymoon({ installDate }) && !canGenerateNewStory({ entitlement, installDate, dailyUsage })
 
   // Get story from navigation state, or use fallback
   const [story] = useState<Story>(() => {
@@ -56,6 +60,9 @@ export default function StoryPage() {
   // Phases: 'waiting' -> 'intro' -> 'brushing' -> 'complete'
   // 'waiting' phase requires user tap to unlock audio on iOS
   const [phase, setPhase] = useState<'waiting' | 'intro' | 'brushing' | 'complete'>('waiting')
+
+  // Keep the screen awake during the brush session. Released on unmount.
+  useWakeLock(phase !== 'waiting')
   const [currentSegment, setCurrentSegment] = useState(0)
   const [spokenSegments, setSpokenSegments] = useState<Set<number>>(new Set())
   const hasSpokenIntro = useRef(false)
@@ -265,6 +272,44 @@ export default function StoryPage() {
     })
   }, [])
 
+  // Speak via the browser's built-in SpeechSynthesis (free, on-device).
+  // Resolves when the utterance ends (or errors) so the queue can advance.
+  const speakWithBrowserTTS = useCallback((text: string): Promise<void> => {
+    return new Promise((resolve) => {
+      if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
+        console.warn('[TTS] Browser speechSynthesis unavailable')
+        resolve()
+        return
+      }
+
+      window.speechSynthesis.cancel()
+
+      const utterance = new SpeechSynthesisUtterance(text)
+      utterance.rate = 0.9
+      utterance.pitch = 1.05
+
+      if (deviceVoiceId) {
+        const voices = window.speechSynthesis.getVoices()
+        const match = voices.find((v) => v.name === deviceVoiceId)
+          || voices.find((v) => v.name.includes(deviceVoiceId))
+        if (match) utterance.voice = match
+      }
+
+      utterance.onstart = () => setIsSpeaking(true)
+      utterance.onend = () => {
+        setIsSpeaking(false)
+        resolve()
+      }
+      utterance.onerror = (e) => {
+        console.error('[TTS] Browser utterance error:', e)
+        setIsSpeaking(false)
+        resolve()
+      }
+
+      window.speechSynthesis.speak(utterance)
+    })
+  }, [deviceVoiceId])
+
   // Process the audio queue sequentially
   const processQueue = useCallback(async () => {
     if (isProcessingQueueRef.current) {
@@ -272,7 +317,7 @@ export default function StoryPage() {
       return
     }
     isProcessingQueueRef.current = true
-    console.log('[TTS] processQueue started')
+    console.log('[TTS] processQueue started, mode:', voiceMode)
 
     while (audioQueueRef.current.length > 0) {
       const item = audioQueueRef.current.shift()
@@ -280,15 +325,26 @@ export default function StoryPage() {
 
       console.log('[TTS] Processing item:', item.text.substring(0, 50) + '...')
 
-      // Reset audio element fully before each new play
-      const audio = audioRef.current
-      if (audio) {
-        audio.pause()
-        audio.removeAttribute('src')
-        audio.load()
-      }
-
       try {
+        if (voiceMode === 'device') {
+          await speakWithBrowserTTS(item.text)
+          console.log('[TTS] Browser playback complete')
+          if (onQueueItemCompleteRef.current) {
+            onQueueItemCompleteRef.current()
+            onQueueItemCompleteRef.current = null
+          }
+          await new Promise(resolve => setTimeout(resolve, 300))
+          continue
+        }
+
+        // Cloud TTS path — reset audio element fully before each new play
+        const audio = audioRef.current
+        if (audio) {
+          audio.pause()
+          audio.removeAttribute('src')
+          audio.load()
+        }
+
         const audioUrl = item.audioUrlPromise
           ? await item.audioUrlPromise
           : await synthesize(item.text, item.voiceId)
@@ -296,16 +352,13 @@ export default function StoryPage() {
           console.log('[TTS] Got audio URL, playing...')
           await playAudioUrl(audioUrl)
           console.log('[TTS] Playback complete')
-          // Call completion callback if set
           if (onQueueItemCompleteRef.current) {
             onQueueItemCompleteRef.current()
             onQueueItemCompleteRef.current = null
           }
-          // Natural breathing pause between items
           await new Promise(resolve => setTimeout(resolve, 300))
         } else {
           console.error('[TTS] synthesize returned null')
-          // Still call completion callback on failure so intro doesn't hang
           if (onQueueItemCompleteRef.current) {
             onQueueItemCompleteRef.current()
             onQueueItemCompleteRef.current = null
@@ -323,7 +376,7 @@ export default function StoryPage() {
 
     console.log('[TTS] processQueue finished, queue empty')
     isProcessingQueueRef.current = false
-  }, [synthesize, playAudioUrl])
+  }, [voiceMode, synthesize, playAudioUrl, speakWithBrowserTTS])
 
   // Add text to queue and start processing
   const queueSpeech = useCallback((text: string, voiceIdToUse: string) => {
@@ -347,6 +400,10 @@ export default function StoryPage() {
 
   // Speak immediately (used for manual play button)
   const speakNow = useCallback(async (text: string, voiceIdToUse: string) => {
+    if (voiceMode === 'device') {
+      await speakWithBrowserTTS(text)
+      return
+    }
     const audioUrl = await synthesize(text, voiceIdToUse)
     if (audioUrl) {
       try {
@@ -355,13 +412,17 @@ export default function StoryPage() {
         console.error('Playback error:', error)
       }
     }
-  }, [synthesize, playAudioUrl])
+  }, [voiceMode, synthesize, playAudioUrl, speakWithBrowserTTS])
 
   const stop = useCallback(() => {
     // Clear the queue
     audioQueueRef.current = []
     isProcessingQueueRef.current = false
     onQueueItemCompleteRef.current = null
+
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      window.speechSynthesis.cancel()
+    }
 
     // Stop current audio and fully clear state
     if (audioRef.current) {
@@ -373,18 +434,28 @@ export default function StoryPage() {
   }, [])
 
   const pause = useCallback(() => {
+    if (voiceMode === 'device' && typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      window.speechSynthesis.pause()
+      setIsSpeaking(false)
+      return
+    }
     if (audioRef.current) {
       audioRef.current.pause()
       setIsSpeaking(false)
     }
-  }, [])
+  }, [voiceMode])
 
   const resume = useCallback(() => {
+    if (voiceMode === 'device' && typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      window.speechSynthesis.resume()
+      setIsSpeaking(true)
+      return
+    }
     if (audioRef.current) {
       audioRef.current.play()
       setIsSpeaking(true)
     }
-  }, [])
+  }, [voiceMode])
 
   // Add story to history on mount
   useEffect(() => {
@@ -471,6 +542,9 @@ export default function StoryPage() {
     return () => {
       audioQueueRef.current = []
       isProcessingQueueRef.current = false
+      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+        window.speechSynthesis.cancel()
+      }
       if (audioRef.current) {
         audioRef.current.pause()
       }
@@ -587,20 +661,6 @@ export default function StoryPage() {
       hasSpokenIntro.current = true
       audioUnlocked.current = true
 
-      // Unlock audio context from user gesture by playing a tiny silent sound
-      try {
-        const audio = audioRef.current
-        if (audio) {
-          audio.src = 'data:audio/mp3;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4Ljc2LjEwMAAAAAAAAAAAAAAA//tQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWGluZwAAAA8AAAACAAABhgC7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7//////////////////////////////////////////////////////////////////8AAAAATGF2YzU4LjEzAAAAAAAAAAAAAAAAJAAAAAAAAAAAAYYoRwSHAAAAAAAAAAAAAAAAAAAA//tQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWGluZwAAAA8AAAACAAABhgC7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7//////////////////////////////////////////////////////////////////8AAAAATGF2YzU4LjEzAAAAAAAAAAAAAAAAJAAAAAAAAAAAAYYoRwSHAAAAAAAAAAAAAAAAAAAA'
-          await audio.play()
-          audio.pause()
-          audio.currentTime = 0
-          console.log('[TTS] Audio context unlocked from user gesture')
-        }
-      } catch (e) {
-        console.warn('[TTS] Audio unlock failed (may still work):', e)
-      }
-
       // Set completion callback — when intro audio finishes, mark it done
       onQueueItemCompleteRef.current = () => {
         console.log('[TTS] Intro audio finished')
@@ -611,23 +671,46 @@ export default function StoryPage() {
         }
       }
 
-      // Queue intro through the queue system
-      console.log('[TTS] Queueing intro speech')
-      queueSpeech(story.intro, voiceId)
+      if (voiceMode === 'device') {
+        // Browser SpeechSynthesis: no audio-element unlock, no prefetch.
+        // Each utterance speaks lazily when its queue slot runs.
+        console.log('[TTS] Queueing intro speech (device voice)')
+        segmentAudioPromisesRef.current = [null, null, null, null]
+        conclusionAudioPromiseRef.current = null
+        queueSpeech(story.intro, voiceId)
+      } else {
+        // Cloud TTS: unlock the HTMLAudioElement from the user gesture so
+        // iOS Safari will let later programmatic .play() calls succeed.
+        try {
+          const audio = audioRef.current
+          if (audio) {
+            audio.src = 'data:audio/mp3;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4Ljc2LjEwMAAAAAAAAAAAAAAA//tQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWGluZwAAAA8AAAACAAABhgC7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7//////////////////////////////////////////////////////////////////8AAAAATGF2YzU4LjEzAAAAAAAAAAAAAAAAJAAAAAAAAAAAAYYoRwSHAAAAAAAAAAAAAAAAAAAA//tQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWGluZwAAAA8AAAACAAABhgC7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7u7//////////////////////////////////////////////////////////////////8AAAAATGF2YzU4LjEzAAAAAAAAAAAAAAAAJAAAAAAAAAAAAYYoRwSHAAAAAAAAAAAAAAAAAAAA'
+            await audio.play()
+            audio.pause()
+            audio.currentTime = 0
+            console.log('[TTS] Audio context unlocked from user gesture')
+          }
+        } catch (e) {
+          console.warn('[TTS] Audio unlock failed (may still work):', e)
+        }
 
-      // Kick off TTS for every segment + conclusion in parallel so they're
-      // (mostly) ready by the time their slot starts. Without this, each
-      // segment synthesizes lazily and narration drifts behind the timer.
-      segmentAudioPromisesRef.current = [null, null, null, null]
-      for (let i = 0; i < story.segments.length && i < 4; i++) {
-        const segmentText = story.segments[i]
-        if (!segmentText) continue
-        const promptText = story.brushingPrompts[i] || ''
-        const combinedText = promptText ? `${promptText} ${segmentText}` : segmentText
-        segmentAudioPromisesRef.current[i] = synthesize(combinedText, voiceId)
-      }
-      if (story.conclusion) {
-        conclusionAudioPromiseRef.current = synthesize(story.conclusion, voiceId)
+        console.log('[TTS] Queueing intro speech (cloud voice)')
+        queueSpeech(story.intro, voiceId)
+
+        // Kick off TTS for every segment + conclusion in parallel so they're
+        // (mostly) ready by the time their slot starts. Without this, each
+        // segment synthesizes lazily and narration drifts behind the timer.
+        segmentAudioPromisesRef.current = [null, null, null, null]
+        for (let i = 0; i < story.segments.length && i < 4; i++) {
+          const segmentText = story.segments[i]
+          if (!segmentText) continue
+          const promptText = story.brushingPrompts[i] || ''
+          const combinedText = promptText ? `${promptText} ${segmentText}` : segmentText
+          segmentAudioPromisesRef.current[i] = synthesize(combinedText, voiceId)
+        }
+        if (story.conclusion) {
+          conclusionAudioPromiseRef.current = synthesize(story.conclusion, voiceId)
+        }
       }
     }
   }
@@ -717,6 +800,16 @@ export default function StoryPage() {
         {phase === 'complete' && (
           <button className={styles.playAgainButton} onClick={handlePlayAgain}>
             Brush Again!
+          </button>
+        )}
+
+        {phase === 'complete' && showUpsell && (
+          <button
+            type="button"
+            className={styles.premiumUpsell}
+            onClick={() => openPaywall('daily_limit')}
+          >
+            Loved that story? <strong>Get unlimited stories with Premium →</strong>
           </button>
         )}
       </div>

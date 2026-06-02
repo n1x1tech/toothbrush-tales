@@ -131,3 +131,26 @@
 .clearButton:hover {
   background: #f5f5f5;
 }
+
+.capBanner {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: linear-gradient(135deg, #fff7e6 0%, #ffffff 100%);
+  border: 2px solid var(--color-secondary, #f5a623);
+  color: var(--color-text);
+  padding: 0.75rem 1rem;
+  border-radius: var(--border-radius);
+  font-size: 0.9rem;
+  cursor: pointer;
+  line-height: 1.4;
+}
+
+.capBanner:hover {
+  filter: brightness(0.98);
+}
+
+.capBanner strong {
+  color: var(--color-secondary, #f5a623);
+  margin-right: 0.25rem;
+}

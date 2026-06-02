@@ -1,11 +1,11 @@
 import { useNavigate } from 'react-router-dom'
-import { useAppStore } from '../store/useAppStore'
+import { useAppStore, FREE_HISTORY_LIMIT, PAYWALL_ENABLED } from '../store/useAppStore'
 import type { Story } from '../hooks/useStoryGeneration'
 import styles from './HistoryPage.module.css'
 
 export default function HistoryPage() {
   const navigate = useNavigate()
-  const { storyHistory, favoriteIds, toggleFavorite, clearHistory } = useAppStore()
+  const { storyHistory, favoriteIds, toggleFavorite, clearHistory, entitlement, openPaywall } = useAppStore()
 
   const handlePlayStory = (story: Story) => {
     navigate('/story', { state: { story } })
@@ -14,9 +14,23 @@ export default function HistoryPage() {
   const favorites = storyHistory.filter((s) => favoriteIds.has(s.id))
   const recent = storyHistory.filter((s) => !favoriteIds.has(s.id))
 
+  const isFree = entitlement === 'free'
+  const atCap = PAYWALL_ENABLED && isFree && storyHistory.length >= FREE_HISTORY_LIMIT
+
   return (
     <div className={styles.container}>
       <h1 className={styles.title}>Story History</h1>
+
+      {atCap && (
+        <button
+          type="button"
+          className={styles.capBanner}
+          onClick={() => openPaywall('history_limit')}
+        >
+          <strong>{storyHistory.length} of {FREE_HISTORY_LIMIT} saved.</strong>
+          <span> Upgrade to Premium for unlimited story history →</span>
+        </button>
+      )}
 
       {favorites.length > 0 && (
         <section className={styles.section}>
