@@ -20,8 +20,8 @@
     "path": "C:\\Users\\nixi\\Documents\\Kids_Games\\toothbrush_tales\\Toothbrush_Tales_Play\\android\\android.keystore",
     "alias": "android"
   },
-  "appVersionName": "1",
-  "appVersionCode": 1,
+  "appVersionName": "2",
+  "appVersionCode": 2,
   "shortcuts": [],
   "generatorApp": "bubblewrap-cli",
   "webManifestUrl": "https://toothbrush-tales-play-5081b.web.app/manifest.webmanifest",
@@ -50,5 +50,5 @@
   "fileHandlers": [],
   "launchHandlerClientMode": "",
   "displayOverride": [],
-  "appVersion": "1"
+  "appVersion": "2"
 }
